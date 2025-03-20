@@ -1,0 +1,249 @@
+﻿<!-- Data Table Component -->
+<div class="data-table">
+    <!-- Header Section -->
+    <div class="data-table__header">
+        <div class="data-table__title"">
+            <h2 class="">Production History</h2>
+        </div>
+        <div class="data-table__controls">
+            <!-- Search Area -->
+            <div class="data-table__search">
+                <div class="search-container">
+                    <input type="text" class="search-input" placeholder="Search" aria-label="Search">
+                    <div class="search-icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </div>
+                    <button type="button" class="clear-button d-none" id="clearSearchButton" aria-label="Clear search">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Control Buttons -->
+            <div class="data-table__toolbar">
+                <div class="dropdown-container search-dropdown">
+                    <button class="data-table__control-btn">
+                        <span>Filter Search</span>
+                        <span class="dropdown-arrow"></span>
+                    </button>
+                    <div class="dropdown-content-container">
+                        <button class="dropdown-item static-input close-static-input">
+                            Close
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                        <button class="dropdown-item static-input">Name</button>
+                        <button class="dropdown-item static-input">Duration</button>
+                        <button class="dropdown-item static-input">File Path</button>
+                        <button class="dropdown-item static-input">Profile Name</button>
+                        <button class="dropdown-item static-input">Length</button>
+                        <button class="dropdown-item static-input">Front-cut Off Distance</button>
+                        <button class="dropdown-item static-input">Cut-off Length</button>
+                        <button class="dropdown-item static-input">Square-up Distance</button>
+                        <button class="dropdown-item static-input">Date</button>
+                    </div>
+                </div>
+                <div class="dropdown-container sort-dropdown">
+                    <button class="data-table__control-btn">
+                        <span class="sort-title">Sort By
+                        </span>
+                        <span class="dropdown-arrow"></span>
+                    </button>
+                    <div class="dropdown-content-container">
+                        <button class="dropdown-item static-input close-static-input">Close
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                        <button class="dropdown-item static-input">Name</button>
+                        <button class="dropdown-item static-input">Duration</button>
+                        <button class="dropdown-item static-input">File Path</button>
+                        <button class="dropdown-item static-input">Profile Name</button>
+                        <button class="dropdown-item static-input">Length</button>
+                        <button class="dropdown-item static-input">Front-cut Off Distance</button>
+                        <button class="dropdown-item static-input">Cut-off Length</button>
+                        <button class="dropdown-item static-input">Square-up Distance</button>
+                        <button class="dropdown-item static-input">Date</button>
+                    </div>
+                </div>
+                <div class="dropdown-container column-dropdown">
+                    <button class="data-table__control-btn">
+                        <div class="icon-text-wrapper">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="3"></circle>
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                            <span>Columns</span>
+                        </div>
+                        <span class="dropdown-arrow"></span>
+                    </button>
+                    <div class="dropdown-content-container">
+                        <button class="dropdown-item static-input close-static-input">
+                            Close
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                        <button class="dropdown-item">Show Column(s)</button>
+                        <div class="checkbox-list">
+                            <div class="checkbox-item">
+                                <label for="name">
+                                    <input type="checkbox" id="name" name="name">
+                                    Name
+                                </label>
+                            </div>
+                            <div class="checkbox-item">
+                                <label for="duration">
+                                    <input type="checkbox" id="duration" name="duration">
+                                    Duration
+                                </label>
+                            </div>
+                            <div class="checkbox-item">
+                                <label for="filePath">
+                                    <input type="checkbox" id="filePath" name="filePath">
+                                    File Path
+                                </label>
+                            </div>
+                            <div class="checkbox-item">
+                                <label for="profileName">
+                                    <input type="checkbox" id="profileName" name="profileName">
+                                    Profile Name
+                                </label>
+                            </div>
+                            <div class="checkbox-item">
+                                <label for="length">
+                                    <input type="checkbox" id="length" name="length">
+                                    Length
+                                </label>
+                            </div>
+                            <div class="checkbox-item">
+                                <label for="frontCutOffDistance">
+                                    <input type="checkbox" id="frontCutOffDistance" name="frontCutOffDistance">
+                                    Front-cut Off Distance
+                                </label>
+                            </div>
+                            <div class="checkbox-item">
+                                <label for="cutOffLength">
+                                    <input type="checkbox" id="cutOffLength" name="cutOffLength">
+                                    Cut-off Length
+                                </label>
+                            </div>
+                            <div class="checkbox-item">
+                                <label for="squareUpDistance">
+                                    <input type="checkbox" id="squareUpDistance" name="squareUpDistance">
+                                    Square-up Distance
+                                </label>
+                            </div>
+                            <div class="checkbox-item">
+                                <label for="date">
+                                    <input type="checkbox" id="date" name="date">
+                                    Date
+                                </label>
+                            </div>
+                        </div>
+                        <button class="dropdown-item static-input">Move Column(s)</button>
+                        <button class="dropdown-item static-input">Apply Defaults</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="container-all-columns"></div>
+    <!-- Table Body -->
+    <div class="data-table__body">
+        <div class="table-container">
+            <div class="container-all-rows"></div>
+        </div>
+    </div>
+
+    <!-- Footer Section -->
+    <div class="data-table__footer">
+        <div class="d-flex flex-row gap-4 h-100">
+            <div class="data-table__page-size">
+                <div class="dropdown-container row-dropdown">
+                    <button class="data-table__control-btn">
+                        Items per page:
+                        <div class="d-flex gap-3 align-items-center justify-content-center mx-2">
+                            <span></span>
+                            <span class="dropdown-arrow"></span>
+                        </div>
+                    </button>
+                    <div class="dropdown-content-container">
+                        <button class="dropdown-item static-input close-static-input">
+                            Close
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                        <button class="dropdown-item static-input">5</button>
+                        <button class="dropdown-item static-input">10</button>
+                        <button class="dropdown-item static-input">15 </button>
+                        <button class="dropdown-item static-input">20</button>
+                        <div class="custom-input-container">
+                            <input type="number" class="custom-row-input custom-input" placeholder="Max 35" min="5" max="35" step="1" required onkeydown="return event.keyCode !== 69" inputmode="numeric" autocomplete="off">
+                            <button class="row-set-button set-button btn-clear"></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="search-text-container">
+                <span class="search-text"></span>
+            </div>
+        </div>
+
+        <div class="data-table__status"></div>
+
+        <!-- Pagination Controls -->
+        <div class="data-table__pagination">
+            <div class="pagination-container">
+                <div class="pagination-controls">
+                    <div class="d-flex flex-row h-100">
+                        <!-- Fast backward button -->
+                        <div class="pagination-button double">
+                            <div class="double-triangle double-triangle-west">
+                                <div class="triangle triangle-west"></div>
+                                <div class="triangle triangle-west"></div>
+                            </div>
+                        </div>
+
+                        <!-- Previous page button -->
+                        <div class="pagination-button">
+                            <div class="triangle triangle-west"></div>
+                        </div>
+                    </div>
+
+                    <!-- Page indicator -->
+                    <div class="pagination-info">
+                        <span class="current">1</span> of <span class="next">5</span>
+                    </div>
+
+                    <div class="d-flex flex-row h-100">
+                        <!-- Next page button -->
+                        <div class="pagination-button">
+                            <div class="triangle triangle-east"></div>
+                        </div>
+
+                        <!-- Fast forward button -->
+                        <div class="pagination-button double">
+                            <div class="double-triangle double-triangle-east">
+                                <div class="triangle triangle-east"></div>
+                                <div class="triangle triangle-east"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
