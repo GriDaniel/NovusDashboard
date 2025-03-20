@@ -1,4 +1,27 @@
-﻿:root {
+html {
+  font-size: 14px;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 16px;
+  }
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+}
+
+html {
+  position: relative;
+  min-height: 100%;
+}
+
+body {
+  margin-bottom: 60px;
+}
+
+:root {
     --primary-color: #b81830;
     --background-light: #F1F2F4;
     --background-control: #DCDFE4;
@@ -55,6 +78,7 @@
     .data-table__title h2 {
         font-size: 24px;
     }
+
 .data-table__controls {
     width: 100%;
     height: 50px;
@@ -205,21 +229,17 @@
         font-size: 14px;
         border-right: 1.5px solid var(--border-color);
         padding-left: 16px;
-       
     }
 
-    .data-table__page-size .data-table__control-btn:hover {
-      
-        background-color: var(--hover-color);
-     
-    }
+        .data-table__page-size .data-table__control-btn:hover {
+            background-color: var(--hover-color);
+        }
 
 
 .data-table__pagination {
     height: 100%;
     width: 20%;
     min-width: 370px;
-    
 }
 
 
@@ -259,14 +279,13 @@
     padding-right: 5px;
 }
 
-.pagination-controls > div {
-    width: 30%;
-}
-
-    .pagination-controls > div:nth-of-type(3) {
-        justify-content: end;
-       
+    .pagination-controls > div {
+        width: 30%;
     }
+
+        .pagination-controls > div:nth-of-type(3) {
+            justify-content: end;
+        }
 
 .pagination-button {
     display: flex;
@@ -278,30 +297,29 @@
     -webkit-user-select: none;
     height: 100%;
     border-left: 1.5px solid var(--border-color);
-
 }
 
-   .pagination-controls > div.d-flex:first-of-type > .pagination-button:nth-child(2) {
+.pagination-controls > div.d-flex:first-of-type > .pagination-button:nth-child(2) {
     border-right: 1.5px solid var(--border-color);
 }
- 
 
-        .pagination-button:hover {
-            background-color: var(--hover-color);
-        }
 
-    .pagination-button.disabled {
-        opacity: 0.3;
-        cursor: default;
+.pagination-button:hover {
+    background-color: var(--hover-color);
+}
+
+.pagination-button.disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+    .pagination-button.disabled:hover {
+        background-color: white;
     }
 
-        .pagination-button.disabled:hover {
-            background-color: white;
-        }
-
-    .pagination-button.double {
-        width: 48px;
-    }
+.pagination-button.double {
+    width: 48px;
+}
 
 .pagination-info {
     margin: 0 16px;
@@ -477,10 +495,10 @@
     width: 220px;
 }
 
-    .dropdown-content-container.show {
-        display: block;
-        animation: fadeIn 0.2s ease;
-    }
+.dropdown-content-container.show {
+    display: block;
+    animation: fadeIn 0.2s ease;
+}
 
 /* Dropdown Items */
 .dropdown-item {
@@ -492,7 +510,6 @@
     border: none;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     color: var(--text-color);
-   
     transition: background-color 0.2s;
 }
 
@@ -507,18 +524,15 @@
     .dropdown-item:focus {
         outline: 2px solid var(--focus-color);
         outline-offset: -2px;
-        
     }
 
 .dropdown-container .dropdown-item:first-of-type {
     background-color: #DCDFE4;
 }
 
-    .column-dropdown .dropdown-item:first-of-type:active {
-        color: var(--text-color) !important;
-       
-        
-    }
+.column-dropdown .dropdown-item:first-of-type:active {
+    color: var(--text-color) !important;
+}
 
 .column-dropdown .dropdown-item:nth-of-type(2) {
     cursor: auto;
@@ -542,12 +556,12 @@
     font-weight: 400;
 }
 
-    .static-input:active {
-        color: var(--text-color);
-    }
+.static-input:active {
+    color: var(--text-color);
+}
 
 
-  
+
 
 /* Custom Input Container */
 .custom-input-container {
@@ -575,9 +589,9 @@
     width: 200px;
 }
 
-    .custom-input:focus {
-        border-color: var(--focus-color);
-    }
+.custom-input:focus {
+    border-color: var(--focus-color);
+}
 
 .custom-row-input {
     -moz-appearance: textfield;
@@ -678,6 +692,7 @@
     -moz-user-select: none; /* Firefox support */
     -ms-user-select: none; /* IE/Edge support */
 }
+
 .checkbox-list {
     padding: 8px 10px;
     border-bottom: 1px solid #eee;
