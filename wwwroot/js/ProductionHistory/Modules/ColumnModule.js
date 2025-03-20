@@ -159,7 +159,6 @@ const ColumnManagerModule = (function () {
                 columns: addedColumns,
                 cells: createdCells
             });
-
             return addedColumns;
         }
 

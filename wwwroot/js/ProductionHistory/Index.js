@@ -3,8 +3,7 @@
     const rowDropdownContainer = document.querySelectorAll('.dropdown-container')
     
     //fetch('/TableState/UpdateColumnTitles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([]) });
-    // Default column titles
-    const defaultColumnTitles = ["Name"];
+    const defaultColumnTitles = ["Profile Name", "File Path"];
 
     
     SearchElementManager.initialize(AreaContainer);

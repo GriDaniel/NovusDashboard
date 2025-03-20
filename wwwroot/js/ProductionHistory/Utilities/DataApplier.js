@@ -31,6 +31,7 @@ const DataApplierModule = (function() {
          * Handles row addition
          */
         _handleRowsAdded(event) {
+            console.log("_handlerowsadded")
             PerformanceTracker.start('handleRowsAdded');
             const { count, rows } = event.detail;
 
@@ -48,7 +49,6 @@ const DataApplierModule = (function() {
             // Calculate previous row count and apply data
             const currentRowCount = RowManagerModule.getRowCount();
             const previousRowCount = currentRowCount - count;
-
             this.applyDataForRowCountChange(rows, this.currentPage, previousRowCount, count, columns)
                 .catch(error => console.error('Error applying data to new rows:', error));
 
@@ -123,6 +123,7 @@ const DataApplierModule = (function() {
          * Handles new columns
          */
         async _handleColumnAdded(event) {
+            console.log("in handle column added")
             PerformanceTracker.start('handleColumnAdded');
             const { column, page, rowCount } = event.detail;
             
@@ -140,6 +141,7 @@ const DataApplierModule = (function() {
             }
             
             PerformanceTracker.end('handleColumnAdded');
+          
         }
         
         /**
@@ -276,14 +278,18 @@ const DataApplierModule = (function() {
          */
         async applyDataForPageChange(rows, page, rowsPerPage, columns) {
             PerformanceTracker.start('applyDataForPageChange');
-
             if (!rows?.length || !columns?.length) {
                 PerformanceTracker.end('applyDataForPageChange');
                 return;
             }
 
             try {
-                const data = await TableDataModule.getPageData(page, rowsPerPage, columns);
+                
+                const data = await TableDataModule.getPageData(page, rowsPerPage, columns)
+                    .then(response => {
+                        return response.json();
+                    });
+               
                 this.applyDataToRows(rows, data, columns);
                 
                 this._dispatchDataEvent('pageDataApplied', { page, rows, data });
@@ -300,7 +306,6 @@ const DataApplierModule = (function() {
          */
         async applyDataForAddedColumn(column, startIndex, rowCount, page) {
             PerformanceTracker.start('applyDataForAddedColumn');
-
             try {
                 let data;
                 
@@ -383,16 +388,18 @@ const DataApplierModule = (function() {
          */
         async applyDataForRowCountChange(rows, currentPage, previousRowCount, addedRowCount, columns) {
             PerformanceTracker.start('applyDataForRowCountChange');
-
+           
             if (!rows?.length || !columns?.length) {
                 PerformanceTracker.end('applyDataForRowCountChange');
                 return;
             }
 
             try {
+                
                 const data = await TableDataModule.handleRowCountChange(
                     currentPage, previousRowCount, addedRowCount, columns
                 );
+                
 
                 this.applyDataToRows(rows, data, columns);
                 PerformanceTracker.end('applyDataForRowCountChange');
@@ -408,7 +415,7 @@ const DataApplierModule = (function() {
          */
         applyDataToRows(rows, data, columns) {
             PerformanceTracker.start('applyDataToRows');
-
+            console.log("incoming data is", data);
             // Normalize data format
             const rowsData = Array.isArray(data) ? data : (data.rows || []);
 
@@ -443,48 +450,14 @@ const DataApplierModule = (function() {
          * Extracts value from data object
          */
         extractValueFromData(rowData, columnName) {
-            // Special case for Profile Name
-            if (columnName === 'Profile Name') {
-                if (rowData.profile) {
-                    if (typeof rowData.profile === 'object') {
-                        let value = rowData.profile.name || rowData.profile.Name;
-                        
-                        if (value === undefined && Array.isArray(rowData.profile)) {
-                            const profileWithName = rowData.profile.find(p => p.name || p.Name);
-                            if (profileWithName) {
-                                value = profileWithName.name || profileWithName.Name;
-                            }
-                        }
-                        
-                        return value;
-                    }
-                    return rowData.profile;
-                }
-                return null;
-            }
-            
-            // Direct property access
+            // First check for direct property match (works for all columns including Profile Name)
             if (rowData.hasOwnProperty(columnName)) {
+                console.log(`Direct match found for ${columnName}: ${rowData[columnName]}`);
                 return rowData[columnName];
             }
-            
-            // Try case variations
-            const camelCase = columnName.replace(/(?:^\w|[A-Z]|\b\w)/g, (word, index) =>
-                index === 0 ? word.toLowerCase() : word.toUpperCase()
-            ).replace(/\s+/g, '');
-            
-            if (rowData.hasOwnProperty(camelCase)) {
-                return rowData[camelCase];
-            }
-            
-            const pascalCase = columnName.replace(/(?:^\w|[A-Z]|\b\w)/g, (word) =>
-                word.toUpperCase()
-            ).replace(/\s+/g, '');
-            
-            if (rowData.hasOwnProperty(pascalCase)) {
-                return rowData[pascalCase];
-            }
-            
+
+            // Add debug logging when no match is found
+            console.log(`No match found for column ${columnName} in data:`, rowData);
             return null;
         }
 

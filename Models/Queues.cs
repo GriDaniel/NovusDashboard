@@ -9,8 +9,8 @@ namespace NovusDashboard.Models
         [BsonRepresentation(MongoDB.Bson.BsonType.String)]
         public Guid Id { get; set; }
 
-        [BsonElement("job_list")]
-        public List<Job> job_list { get; set; } = new List<Job>();
+        [BsonElement("Jobs")]
+        public List<Job> Jobs { get; set; } = new List<Job>();
     }
 
     public class Job
@@ -24,22 +24,22 @@ namespace NovusDashboard.Models
         [BsonElement("Duration")]
         public string Duration { get; set; }
 
-        [BsonElement("File Path")]
+        [BsonElement("FilePath")]
         public string FilePath { get; set; }
 
-        [BsonElement("profile")]
+        [BsonElement("Profile")]
         public Profile Profile { get; set; }
 
         [BsonElement("Length")]
         public string Length { get; set; }
 
-        [BsonElement("Front Cut-off Distance")]
+        [BsonElement("FrontCutOffDistance")]
         public string FrontCutOffDistance { get; set; }
 
         [BsonElement("Cut-off Length")]
         public string CutOffLength { get; set; }
 
-        [BsonElement("Square-up Distance")]
+        [BsonElement("SquareUpDistance")]
         public string SquareUpDistance { get; set; }
 
         [BsonElement("Date")]
@@ -48,7 +48,7 @@ namespace NovusDashboard.Models
 
     public class Profile
     {
-        [BsonElement("name")]
+        [BsonElement("Name")]
         public string Name { get; set; }
     }
 }
