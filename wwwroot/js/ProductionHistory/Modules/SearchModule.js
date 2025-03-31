@@ -1,14 +1,17 @@
 ﻿/**
- * @module SearchManagerModule
+ * @title SearchBarModule
+ * @description   Manages the interaction with the search bar and dispatches
+ *                search events to the system
  * @author Daniel Oliveira
- * @description Manages the interaction with the search bar and dispatches
- *              necessary events to preform search actions on the database
  */
 const SearchBarModule = (function () {
+    // Module state
     const elements = {};
     let currentSearchType = '';
     let searchTimeout = null;
     const SEARCH_DELAY = 300; // ms delay after typing
+
+    // SEARCH LOGIC METHODS
 
     /**
      * Extracts search type from placeholder text
@@ -48,6 +51,65 @@ const SearchBarModule = (function () {
         }));
     }
 
+    // EVENT HANDLING METHODS
+
+    /**
+     * Sets up input event handlers
+     */
+    function setupInputHandler() {
+        if (!elements.input) return;
+
+        elements.input.addEventListener('input', () => {
+            // Update UI
+            const isEmpty = elements.input.value.length === 0;
+            updateClearButtonVisibility(!isEmpty);
+            SortIndicatorModule.clearAllSortIndicatorsReset();
+
+            // Debounce search
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(performSearch, SEARCH_DELAY);
+        });
+    }
+
+    /**
+     * Sets up clear button handler
+     */
+    function setupClearButtonHandler() {
+        if (!elements.clear) return;
+
+        elements.clear.addEventListener('click', () => {
+            clearSearch();
+            elements.input.focus();
+        });
+    }
+
+    // UI UPDATE METHODS
+
+    /**
+     * Updates clear button visibility
+     */
+    function updateClearButtonVisibility(isVisible) {
+        if (!elements.clear) return;
+
+        SearchElementManager.updateClearButtonVisibility(elements.clear, isVisible);
+    }
+
+    /**
+     * Clears the search input and dispatches event
+     */
+    function clearSearch() {
+        if (!elements.input) return;
+
+        SearchElementManager.clearSearchInput(elements.input, elements.clear, elements.container);
+
+        clearTimeout(searchTimeout);
+        searchTimeout = null;
+
+        document.dispatchEvent(new CustomEvent('search:cleared', { bubbles: true }));
+    }
+
+    // INITIALIZATION
+
     /**
      * Sets up the search component
      */
@@ -55,6 +117,8 @@ const SearchBarModule = (function () {
         try {
             // Initialize dependencies and cache elements
             !SearchElementManager.getInstance() && SearchElementManager.initialize(container);
+
+            // Cache DOM elements
             elements.input = SearchElementManager.getSearchInput(false);
             elements.clear = SearchElementManager.getClearIcon(false);
             elements.container = SearchElementManager.getSearchContainer(false);
@@ -64,41 +128,9 @@ const SearchBarModule = (function () {
                 return null;
             }
 
-            // Input handler with debounce
-            elements.input.addEventListener('input', () => {
-                // Update UI
-                const isEmpty = elements.input.value.length === 0;
-                elements.clear.classList.toggle(SearchElementManager.getHiddenClass(), isEmpty);
-
-                if (elements.container) {
-                    const text = elements.input.value.trim();
-                    elements.container.textContent = text ? `Searching '${text}'` : '';
-                }
-
-                // Debounce search
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(performSearch, SEARCH_DELAY);
-            });
-
-            // Clear button handler
-            elements.clear.addEventListener('click', () => {
-                DOMUtils.batchUpdate(() => {
-                    elements.input.value = '';
-                    elements.clear.classList.add(SearchElementManager.getHiddenClass());
-                    if (elements.container) elements.container.textContent = '';
-                    elements.input.focus();
-
-                    clearTimeout(searchTimeout);
-                    searchTimeout = null;
-
-                    document.dispatchEvent(new CustomEvent('search:cleared', { bubbles: true }));
-                });
-            });
-
-            // Initial state check
-            if (elements.input.value.trim().length === 0) {
-                document.dispatchEvent(new CustomEvent('search:cleared', { bubbles: true }));
-            }
+            // Set up event handlers
+            setupInputHandler();
+            setupClearButtonHandler();
 
             return this;
         } catch (error) {
@@ -117,13 +149,10 @@ const SearchBarModule = (function () {
             const input = inputElement || elements.input;
             if (!input) return;
 
-            DOMUtils.batchUpdate(() => {
-                input.placeholder = `Search by ${buttonText}`;
-            });
-
+            SearchElementManager.updatePlaceholder(input, `Search by ${buttonText}`);
             currentSearchType = buttonText;
 
-            // Trigger search  if input has content
+            // Trigger search if input has content
             if (input.value.trim().length > 0) {
                 clearTimeout(searchTimeout);
                 searchTimeout = setTimeout(performSearch, SEARCH_DELAY);
@@ -131,38 +160,7 @@ const SearchBarModule = (function () {
         },
 
         clearSearch() {
-            if (!elements.input) return;
-
-            DOMUtils.batchUpdate(() => {
-                elements.input.value = '';
-                elements.clear?.classList.add(SearchElementManager.getHiddenClass());
-                if (elements.container) elements.container.textContent = '';
-
-                clearTimeout(searchTimeout);
-                searchTimeout = null;
-
-                document.dispatchEvent(new CustomEvent('search:cleared', { bubbles: true }));
-            });
-        },
-
-        search(term, type) {
-            if (!elements.input) return;
-
-            elements.input.value = term;
-            elements.clear.classList.toggle(SearchElementManager.getHiddenClass(), term.length === 0);
-
-            if (elements.container) {
-                elements.container.textContent = term ? `Searching '${term}'` : '';
-            }
-
-            if (type) {
-                elements.input.placeholder = `Search by ${type}`;
-                currentSearchType = type;
-            }
-
-            term.trim().length === 0
-                ? document.dispatchEvent(new CustomEvent('search:cleared', { bubbles: true }))
-                : performSearch();
+            clearSearch();
         },
 
         getCurrentSearchType: () => currentSearchType,

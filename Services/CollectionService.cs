@@ -1,5 +1,7 @@
 ﻿using MongoDB.Bson;
 using MongoDB.Driver;
+using System.Collections;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace NovusDashboard.Services
@@ -9,29 +11,54 @@ namespace NovusDashboard.Services
         private readonly MongoDBService _mongoDBService;
         private readonly string _collectionName;
         private readonly Dictionary<string, string> _fieldMappings;
+        private readonly Dictionary<string, Stopwatch> _performanceTimers = new Dictionary<string, Stopwatch>();
 
         public CollectionService(MongoDBService mongoDBService, string collectionName = "test_models")
         {
             _mongoDBService = mongoDBService;
             _collectionName = collectionName;
 
-                    // Initialize comprehensive field mappings
-                    _fieldMappings = new Dictionary<string, string>
-        {
-            // Explicitly map both Name fields
-            { "Name", "Name" },                    // Job.Name - explicitly defined
-            { "Profile Name", "Profile.Name" },    // Profile.Name
-    
-            // Other mappings
-            { "File Path", "FilePath" },
-            { "Front-cut Off Distance", "FrontCutOffDistance" },
-            { "Cut-off Length", "CutOffLength" },
-            { "Square-up Distance", "SquareUpDistance" }
-        };
+            // Initialize comprehensive field mappings
+            _fieldMappings = new Dictionary<string, string>
+            {
+                // Explicitly map both Name fields
+                { "Name", "Name" },                    // Job.Name - explicitly defined
+                { "Profile Name", "Profile.Name" },    // Profile.Name
+        
+                // Other mappings
+                { "File Path", "FilePath" },
+                { "Front-cut Off Distance", "FrontCutOffDistance" },
+                { "Cut-off Length", "CutOffLength" },
+                { "Square-up Distance", "SquareUpDistance" }
+            };
         }
 
+        private void StartTimer(string operation)
+        {
+            var timer = new Stopwatch();
+            timer.Start();
+            _performanceTimers[operation] = timer;
+            Console.WriteLine($"[PERF] Starting timer for: {operation}");
+        }
+
+        private long StopTimer(string operation)
+        {
+            if (_performanceTimers.TryGetValue(operation, out var timer))
+            {
+                timer.Stop();
+                var elapsed = timer.ElapsedMilliseconds;
+                Console.WriteLine($"[PERF] {operation} completed in {elapsed}ms");
+                _performanceTimers.Remove(operation);
+                return elapsed;
+            }
+            return 0;
+        }
+
+        // Helper methods preserved from original implementation
         public BsonDocument CreateColumnProjection(string[] displayColumns)
         {
+            StartTimer("CreateColumnProjection");
+
             // Create projection that uses direct field mapping instead of inclusion/exclusion
             var projectionDoc = new BsonDocument();
 
@@ -83,161 +110,66 @@ namespace NovusDashboard.Services
 
             // Debug log the final projection
             Console.WriteLine($"Final projection: {projectionDoc.ToJson()}");
+
+            StopTimer("CreateColumnProjection");
             return projectionDoc;
         }
 
-        // Get total count using aggregation
-        public int GetTotalJobCount()
-        {
-            var countPipeline = new BsonDocument[]
-            {
-                new BsonDocument("$unwind", "$Jobs"),  
-                new BsonDocument("$count", "total")
-            };
-
-            var result = _mongoDBService.ExecuteAggregation(_collectionName, countPipeline);
-            return result.Any() ? result.First()["total"].AsInt32 : 0;
-        }
-
-        // Get paged data using aggregation
-        public List<Dictionary<string, object>> GetPagedJobData(string[] columns, int pageNumber, int rowsPerPage)
-        {
-            var projection = CreateColumnProjection(columns);
-
-            var pipeline = new BsonDocument[]
-            {
-        new BsonDocument("$unwind", "$Jobs"),
-        new BsonDocument("$replaceRoot", new BsonDocument("newRoot", "$Jobs")),
-        new BsonDocument("$project", projection),
-        new BsonDocument("$skip", (pageNumber - 1) * rowsPerPage),
-        new BsonDocument("$limit", rowsPerPage)
-            };
-
-            var results = _mongoDBService.ExecuteAggregation(_collectionName, pipeline);
-
-            // The documents are already properly transformed by the projection stage
-            // so we can convert them directly to dictionaries
-            return results.Select(doc => doc.ToDictionary()).ToList();
-        }
-
-        // Get range of data using aggregation
-        public List<Dictionary<string, object>> GetRangeJobData(string[] columns, int startIndex, int count)
-        {
-            var projection = CreateColumnProjection(columns);
-
-            var pipeline = new BsonDocument[]
-            {
-        new BsonDocument("$unwind", "$Jobs"),
-        new BsonDocument("$replaceRoot", new BsonDocument("newRoot", "$Jobs")),
-        new BsonDocument("$project", projection),
-        new BsonDocument("$skip", startIndex),
-        new BsonDocument("$limit", count)
-            };
-
-            var results = _mongoDBService.ExecuteAggregation(_collectionName, pipeline);
-
-            // The documents are already properly transformed by the projection stage
-            return results.Select(doc => doc.ToDictionary()).ToList();
-        }
-
-
-        // Handle row count change using aggregation
-        public List<Dictionary<string, object>> HandleRowCountChange(int currentPage, int currentRowsPerPage,
-            int rowCountChange, string[] columns)
-        {
-            if (rowCountChange <= 0)
-                return new List<Dictionary<string, object>>();
-
-            int additionalStartIndex = (currentPage - 1) * currentRowsPerPage + currentRowsPerPage;
-            return GetRangeJobData(columns, additionalStartIndex, rowCountChange);
-        }
-
-        // Create a match stage for search query with field mapping
         private BsonDocument CreateSearchMatchStage(string term, string type)
         {
+            StartTimer("CreateSearchMatchStage");
+
             // Check if we have a mapping for this search field
             string fieldName = type;
             if (_fieldMappings.TryGetValue(type, out string mappedField))
             {
                 fieldName = mappedField;
+                Console.WriteLine($"[PERF] Mapped search field {type} to {fieldName}");
             }
 
+            BsonDocument matchStage;
             // Handle nested fields
             if (fieldName.Contains('.'))
             {
                 // For nested fields like "Profile.Name"
-                return new BsonDocument("$match", new BsonDocument(
+                matchStage = new BsonDocument("$match", new BsonDocument(
                     fieldName, new BsonDocument("$regex", new BsonRegularExpression($".*{term}.*", "i"))));
+                Console.WriteLine($"[PERF] Created nested field match for {fieldName}");
             }
             else
             {
                 // For regular fields
-                return new BsonDocument("$match", new BsonDocument(
+                matchStage = new BsonDocument("$match", new BsonDocument(
                     fieldName, new BsonDocument("$regex", new BsonRegularExpression($".*{term}.*", "i"))));
+                Console.WriteLine($"[PERF] Created regular field match for {fieldName}");
             }
+
+            StopTimer("CreateSearchMatchStage");
+            return matchStage;
         }
 
-        // Search data with pagination
-        public List<Dictionary<string, object>> SearchData(string term, string type, string[] columns, int page, int rowsPerPage)
+        private BsonDocument CreateSortStage(string sortColumn, int sortOrder)
         {
-            var projection = CreateColumnProjection(columns);
-            var matchStage = CreateSearchMatchStage(term, type);
+            StartTimer("CreateSortStage");
 
-            var pipeline = new BsonDocument[]
+            // Map the sort column if needed
+            string mappedSortField = sortColumn;
+            if (_fieldMappings.TryGetValue(sortColumn, out string mappedField))
             {
-        new BsonDocument("$unwind", "$Jobs"),
-        new BsonDocument("$replaceRoot", new BsonDocument("newRoot", "$Jobs")),
-        matchStage,
-        new BsonDocument("$project", projection),
-        new BsonDocument("$skip", (page - 1) * rowsPerPage),
-        new BsonDocument("$limit", rowsPerPage)
-            };
+                mappedSortField = mappedField;
+                Console.WriteLine($"[PERF] Mapped sort column {sortColumn} to {mappedSortField}");
+            }
 
-            var results = _mongoDBService.ExecuteAggregation(_collectionName, pipeline);
+            var sortStage = new BsonDocument("$sort", new BsonDocument(mappedSortField, sortOrder));
 
-            // The documents are already properly transformed by the projection stage
-            return results.Select(doc => doc.ToDictionary()).ToList();
-        }
-
-        // Search data with range
-        public List<Dictionary<string, object>> SearchRangeData(string term, string type, string[] columns, int startIndex, int count)
-        {
-            var projection = CreateColumnProjection(columns);
-            var matchStage = CreateSearchMatchStage(term, type);
-
-            var pipeline = new BsonDocument[]
-            {
-                new BsonDocument("$unwind", "$Jobs"),  // Changed from "job_list"
-                new BsonDocument("$replaceRoot", new BsonDocument("newRoot", "$Jobs")),
-                matchStage,
-                new BsonDocument("$project", projection),
-                new BsonDocument("$skip", startIndex),
-                new BsonDocument("$limit", count)
-            };
-
-            var results = _mongoDBService.ExecuteAggregation(_collectionName, pipeline);
-            return results.Select(doc => TransformResultKeys(doc)).ToList();
-        }
-
-        // Get count of search results
-        public int SearchCount(string term, string type)
-        {
-            var matchStage = CreateSearchMatchStage(term, type);
-
-            var pipeline = new BsonDocument[]
-            {
-                new BsonDocument("$unwind", "$Jobs"),  // Changed from "job_list"
-                new BsonDocument("$replaceRoot", new BsonDocument("newRoot", "$Jobs")),
-                matchStage,
-                new BsonDocument("$count", "total")
-            };
-
-            var result = _mongoDBService.ExecuteAggregation(_collectionName, pipeline);
-            return result.Any() ? result.First()["total"].AsInt32 : 0;
+            StopTimer("CreateSortStage");
+            return sortStage;
         }
 
         private Dictionary<string, object> TransformResultKeys(BsonDocument doc)
         {
+            StartTimer("TransformResultKeys");
+
             var result = new Dictionary<string, object>();
             var reverseMapping = _fieldMappings.ToDictionary(x => x.Value, x => x.Key);
 
@@ -296,36 +228,127 @@ namespace NovusDashboard.Services
                 }
             }
 
+            StopTimer("TransformResultKeys");
             return result;
         }
 
-        // Helper method to extract nested values
-        private object ExtractNestedValue(Dictionary<string, object> document, string path)
+        // UNIFIED DATA RETRIEVAL METHOD
+        /// <summary>
+        /// Unified method for retrieving data with filtering, sorting, and pagination
+        /// </summary>
+        public List<Dictionary<string, object>> GetData(
+            string[] columns,
+            int startIndex,
+            int count,
+            string searchTerm = null,
+            string searchType = null,
+            string sortColumn = null,
+            int? sortOrder = null)
         {
-            var parts = path.Split('.');
-            object current = document;
+            StartTimer($"GetData_{startIndex}_{count}");
+            Console.WriteLine($"[PERF] Unified data retrieval: StartIndex {startIndex}, Count {count}, " +
+                            $"Search {searchTerm}/{searchType}, Sort {sortColumn}/{sortOrder}");
 
-            foreach (var part in parts)
+            // Create projection for columns
+            StartTimer("GetData_CreateProjection");
+            var projection = CreateColumnProjection(columns);
+            StopTimer("GetData_CreateProjection");
+
+            // Build pipeline stages
+            StartTimer("GetData_BuildPipeline");
+            var pipelineStages = new List<BsonDocument>
             {
-                if (current is Dictionary<string, object> dict)
-                {
-                    if (dict.TryGetValue(part, out object value))
-                    {
-                        current = value;
-                    }
-                    else
-                    {
-                        return null;  // Path doesn't exist
-                    }
-                }
-                else
-                {
-                    return null;  // Current is not a dictionary
-                }
+                new BsonDocument("$unwind", "$Jobs"),
+                new BsonDocument("$replaceRoot", new BsonDocument("newRoot", "$Jobs"))
+            };
+
+            // Add search stage if provided
+            if (!string.IsNullOrEmpty(searchTerm) && !string.IsNullOrEmpty(searchType))
+            {
+                pipelineStages.Add(CreateSearchMatchStage(searchTerm, searchType));
             }
 
-            return current;
+            // Add sort stage if provided
+            if (!string.IsNullOrEmpty(sortColumn) && sortOrder.HasValue)
+            {
+                // For non-nested fields, add case-insensitive sorting
+                var tempFieldDoc = new BsonDocument();
+                tempFieldDoc.Add("_tempSortField", new BsonDocument("$toLower", $"${sortColumn}"));
+                pipelineStages.Add(new BsonDocument("$addFields", tempFieldDoc));
+                pipelineStages.Add(new BsonDocument("$sort", new BsonDocument("_tempSortField", sortOrder.Value)));
+            }
+
+            // Add projection stage
+            pipelineStages.Add(new BsonDocument("$project", projection));
+
+            // Add pagination stages
+            pipelineStages.Add(new BsonDocument("$skip", startIndex));
+            pipelineStages.Add(new BsonDocument("$limit", count));
+            StopTimer("GetData_BuildPipeline");
+
+            // Execute the pipeline
+            StartTimer("GetData_ExecuteAggregation");
+            var results = _mongoDBService.ExecuteAggregation(
+                _collectionName,
+                pipelineStages.ToArray(),
+                new AggregateOptions
+                {
+                    Collation = new Collation("en", strength: CollationStrength.Secondary)
+                });
+            StopTimer("GetData_ExecuteAggregation");
+
+            // Transform results
+            StartTimer("GetData_TransformResults");
+            var data = results.Select(doc => TransformResultKeys(doc)).ToList();
+            StopTimer("GetData_TransformResults");
+
+            Console.WriteLine($"[PERF] Retrieved {data.Count} records");
+            StopTimer($"GetData_{startIndex}_{count}");
+
+            return data;
         }
+
+        // UNIFIED COUNT METHOD
+        /// <summary>
+        /// Unified method for getting counts with optional filtering
+        /// </summary>
+        public int GetCount(string searchTerm = null, string searchType = null)
+        {
+            StartTimer($"GetCount_{searchTerm}_{searchType}");
+            Console.WriteLine($"[PERF] Unified count: Search {searchTerm}/{searchType}");
+
+            // Build pipeline stages
+            StartTimer("GetCount_BuildPipeline");
+            var pipelineStages = new List<BsonDocument>
+            {
+                new BsonDocument("$unwind", "$Jobs"),
+                new BsonDocument("$replaceRoot", new BsonDocument("newRoot", "$Jobs"))
+            };
+
+            // Add search stage if provided
+            if (!string.IsNullOrEmpty(searchTerm) && !string.IsNullOrEmpty(searchType))
+            {
+                pipelineStages.Add(CreateSearchMatchStage(searchTerm, searchType));
+            }
+
+            // Add count stage
+            pipelineStages.Add(new BsonDocument("$count", "total"));
+            StopTimer("GetCount_BuildPipeline");
+
+            // Execute the pipeline
+            StartTimer("GetCount_ExecuteAggregation");
+            var result = _mongoDBService.ExecuteAggregation(_collectionName, pipelineStages.ToArray());
+            StopTimer("GetCount_ExecuteAggregation");
+
+            // Get count
+            var count = result.Any() ? result.First()["total"].AsInt32 : 0;
+
+            Console.WriteLine($"[PERF] Count: {count}");
+            StopTimer($"GetCount_{searchTerm}_{searchType}");
+
+            return count;
+        }
+
     }
 
     // Extension method for BsonDocument conversion

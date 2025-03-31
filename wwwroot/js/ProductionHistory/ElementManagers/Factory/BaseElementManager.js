@@ -1,7 +1,7 @@
 ﻿/**
- * @module BaseElementManager
- * @Author Da
- * @description Factory for creating element managers with built-in caching methods 
+ * @title ColumnElementManager
+ * @description Factory for creating element managers with built-in caching methods
+ * @author Daniel Oliveira
  */
 const BaseElementManager = (function () {
     return {

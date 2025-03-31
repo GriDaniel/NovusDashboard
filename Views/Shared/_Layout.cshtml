@@ -7,31 +7,21 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/NovusDashboard.styles.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/css/Home.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/productionhistory/Home.css" asp-append-version="true" />
+    <link rel="preconnect" href="http://localhost:5023" crossorigin>
+    <link rel="dns-prefetch" href="http://localhost:5023">
+    
 </head>
 <body>
+    <form asp-controller="ProductionHistory" asp-action="Home" method="get">
+        <button type="submit" class="btn btn-primary">Go to Home</button>
+    </form>
     <div>
         @RenderBody()
     </div>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="~/js/site.js" asp-append-version="true"></script>
-    <script src="~/js/ProductionHistory/Modules/TableDataModule.js" true"></script>
-    <script src="~/js/ProductionHistory/ElementManagers/Factory/BaseElementManager.js" true"></script>
-    <script src="~/js/ProductionHistory/ElementManagers/TableElementManager.js" true"></script>
-    <script src="~/js/ProductionHistory/ElementManagers/SearchElementManager.js"true"></script>
-    <script src="~/js/ProductionHistory/ElementManagers/DropdownElementManager.js" true"></script>
-    <script src="~/js/ProductionHistory/ElementManagers/ColumnElementManager.js" true"></script>
-    <script src="~/js/ProductionHistory/ElementManagers/RowElementManager.js" true"></script>
-    <script src="~/js/ProductionHistory/ElementManagers/PaginationElementManager.js" true"></script>
-    <script src="~/js/ProductionHistory/Modules/SearchModule.js" true"></script>
-    <script src="~/js/ProductionHistory/Modules/DropdownModule.js" true"></script>
-    <script src="~/js/ProductionHistory/Modules/RowModule.js" true"></script>
-    <script src="~/js/ProductionHistory/Modules/ColumnModule.js" true"></script>
-    <script src="~/js/ProductionHistory/Modules/PaginationModule.js" true"></script>
-    <script src="~/js/ProductionHistory/Utilities/DataApplier.js" true"></script>
-    <script src="~/js/ProductionHistory/Utilities/Utility.js" true"></script>
-    <script src="~/js/ProductionHistory/Index.js" true"></script>
+    
 
     @await RenderSectionAsync("Scripts", required: false)
 </body>

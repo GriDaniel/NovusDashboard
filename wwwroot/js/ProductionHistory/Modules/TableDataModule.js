@@ -1,366 +1,604 @@
 ﻿/**
- * @module TableDataModule
+ * @title TableDataModule
+ * @description Handles data retrieval and event management for table data
  * @author Daniel Oliveira
- * @description Provides methods for calling C# backend to retrieve data batches
- *              that are later applied to columns and rows
  */
 const TableDataModule = (function () {
-    const baseUrl = '/ProductionHistory';
+    // STATE MANAGEMENT
+    const state = {
+        mode: 'regular',    // 'regular', 'search', or 'sort'
+        search: { term: '', type: '' },
+        sort: { column: '', direction: '' },
+        currentPage: 1,
+        isBusy: false,
+        totalCount: null,
+        stashedCount: null
+    };
 
-    // Search state
-    let _isSearchActive = false;
-    let _currentSearchTerm = '';
-    let _currentSearchType = '';
+    // HELPER METHODS
+    const getRowsPerPage = (defaultValue = 10) => DropdownContainerModule?.getSelectedRowCount?.() || defaultValue;
+    const getColumns = () => ColumnElementManager.getColumnHeaders() || [];
+    const getRowCount = () => RowManagerModule.getRowCount();
 
     /**
-     * Formats column parameters for API requests
+     * Dispatches a data event
      */
-    function formatColumnsQuery(columns) {
-        const columnArray = Array.isArray(columns) ? columns : [columns];
-        
-        // DEBUG: Log columns being requested
-        console.log('[DEBUG] Columns requested:', columnArray);
-        
-        // DEBUG: Check if Profile Name is in requested columns
-        if (columnArray.includes('Profile Name')) {
-            console.log('[DEBUG] Profile Name is in the requested columns');
-        }
-        
-        return columnArray.map(c => `columns=${encodeURIComponent(c)}`).join('&');
+    function dispatchEvent(eventName, detail) {
+        document.dispatchEvent(new CustomEvent(`tableData:${eventName}`, {
+            bubbles: true,
+            detail
+        }));
     }
 
     /**
-     * Routes to search or regular data based on state
+     * Updates pagination state
      */
-    async function useSearchOrRegular(regularFetch, searchFetch) {
-        // DEBUG: Log search state
-        console.log(`[DEBUG] Search active: ${_isSearchActive}, Term: ${_currentSearchTerm}, Type: ${_currentSearchType}`);
-        
-        // DEBUG: Special tracking for Profile Name search
-        if (_isSearchActive && _currentSearchType === 'Profile Name') {
-            console.log('[DEBUG] Performing search with Profile Name as the search type');
-        }
-        
-        return (_isSearchActive && _currentSearchTerm && _currentSearchType)
-            ? await searchFetch()
-            : await regularFetch();
-    }
-
-    /**
-     * Fetches page data with pagination
-     */
-    async function getPageData(page, rowsPerPage, columns) {
-        try {
-            console.log(`[DEBUG] getPageData called - page: ${page}, rowsPerPage: ${rowsPerPage}`);
-            
-            const data = await useSearchOrRegular(
-                async () => {
-                    const columnsQuery = formatColumnsQuery(columns);
-                    const url = `${baseUrl}/GetPageData?page=${page}&rowsPerPage=${rowsPerPage}&${columnsQuery}`;
-                    console.log(`[DEBUG] Fetching regular page data with URL: ${url}`);
-                    
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                    const data = await response.json();
-                    
-                    // DEBUG: Check response for Profile Name data
-                    console.log(`[DEBUG] Received ${data.length} rows of data`);
-                    if (columns.includes('Profile Name')) {
-                        console.log('[DEBUG] Checking response for Profile Name values:');
-                        data.forEach((item, index) => {
-                            console.log(`[DEBUG] Row ${index} - Profile Name value: ${JSON.stringify(item['Profile Name'])}`);
-                        });
-                    }
-                    
-                    return data;
-                },
-                async () => searchData(_currentSearchTerm, _currentSearchType, page, rowsPerPage, columns)
-            );
-            
-            return data;
-        } catch (error) {
-            console.error('Error fetching page data:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Gets total item count
-     */
-    async function getTotalCount() {
-        try {
-            return await useSearchOrRegular(
-                async () => {
-                    console.log('[DEBUG] Fetching regular total count');
-                    const response = await fetch(`${baseUrl}/GetTotalCount`);
-                    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                    return await response.json();
-                },
-                async () => {
-                    const url = `${baseUrl}/SearchCount?term=${encodeURIComponent(_currentSearchTerm)}&type=${encodeURIComponent(_currentSearchType)}`;
-                    console.log(`[DEBUG] Fetching search count with URL: ${url}`);
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                    return await response.json();
-                }
-            );
-        } catch (error) {
-            console.error('Error fetching total count:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Fetches data by range
-     */
-    async function getRangeJobData(columns, startIndex, count) {
-        try {
-            console.log(`[DEBUG] getRangeJobData called - startIndex: ${startIndex}, count: ${count}`);
-            
-            const data = await useSearchOrRegular(
-                async () => {
-                    const columnsQuery = formatColumnsQuery(columns);
-                    const url = `${baseUrl}/GetRangeJobData?startIndex=${startIndex}&count=${count}&${columnsQuery}`;
-                    console.log(`[DEBUG] Fetching range data with URL: ${url}`);
-                    
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                    const data = await response.json();
-                    
-                    // DEBUG: Check response for Profile Name data
-                    if (columns.includes('Profile Name')) {
-                        console.log('[DEBUG] Checking range response for Profile Name values:');
-                        data.forEach((item, index) => {
-                            console.log(`[DEBUG] Range row ${index} - Profile Name value: ${JSON.stringify(item['Profile Name'])}`);
-                        });
-                    }
-                    
-                    return data;
-                },
-                async () => {
-                    const columnsQuery = formatColumnsQuery(columns);
-                    const url = `${baseUrl}/SearchRange?term=${encodeURIComponent(_currentSearchTerm)}&type=${encodeURIComponent(_currentSearchType)}&startIndex=${startIndex}&count=${count}&${columnsQuery}`;
-                    console.log(`[DEBUG] Fetching search range with URL: ${url}`);
-                    
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                    const data = await response.json();
-                    
-                    // DEBUG: Check response for Profile Name data in search results
-                    if (columns.includes('Profile Name')) {
-                        console.log('[DEBUG] Checking search range response for Profile Name values:');
-                        data.forEach((item, index) => {
-                            console.log(`[DEBUG] Search range row ${index} - Profile Name value: ${JSON.stringify(item['Profile Name'])}`);
-                        });
-                    }
-                    
-                    return data;
-                }
-            );
-            
-            return data;
-        } catch (error) {
-            console.error('Error fetching range data:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Handles changes to row count
-     */
-    async function handleRowCountChange(currentPage, currentRowCount, rowCountChange, columns) {
-        try {
-            console.log(`[DEBUG] handleRowCountChange - page: ${currentPage}, currentRowCount: ${currentRowCount}, change: ${rowCountChange}`);
-            
-            return await useSearchOrRegular(
-                async () => {
-                    const columnsQuery = formatColumnsQuery(columns);
-                    const url = `${baseUrl}/HandleRowCountChange?currentPage=${currentPage}&currentRowCount=${currentRowCount}&rowCountChange=${rowCountChange}&${columnsQuery}`;
-                    console.log(`[DEBUG] Handling row count change with URL: ${url}`);
-                    
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                    const data = await response.json();
-                    
-                    // DEBUG: Check response for Profile Name data
-                    if (columns.includes('Profile Name')) {
-                        console.log('[DEBUG] Checking row count change response for Profile Name values:');
-                        data.forEach((item, index) => {
-                            console.log(`[DEBUG] Row count change row ${index} - Profile Name value: ${JSON.stringify(item['Profile Name'])}`);
-                        });
-                    }
-                    
-                    return data;
-                },
-                async () => {
-                    // Use SearchRange for search mode
-                    const startIndex = (currentPage - 1) * currentRowCount + currentRowCount;
-                    const columnsQuery = formatColumnsQuery(columns);
-                    const url = `${baseUrl}/SearchRange?term=${encodeURIComponent(_currentSearchTerm)}&type=${encodeURIComponent(_currentSearchType)}&startIndex=${startIndex}&count=${rowCountChange}&${columnsQuery}`;
-                    console.log(`[DEBUG] Handling row count change in search mode with URL: ${url}`);
-                    
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                    return await response.json();
-                }
-            );
-        } catch (error) {
-            console.error('Error handling row count change:', error);
-            throw error;
-        }
-    }
-
-    /**
-     * Performs data search
-     */
-    async function searchData(term, type, page, rowsPerPage, columns) {
-        try {
-            if (!term || !type) {
-                throw new Error('Search term and type are required');
+    function updatePagination(page, totalCount, rowsPerPage) {
+        document.dispatchEvent(new CustomEvent('pagination:stateUpdated', {
+            bubbles: true,
+            detail: {
+                page,
+                totalPages: Math.max(1, Math.ceil(totalCount / rowsPerPage)),
+                totalCount
             }
+        }));
+    }
 
-            console.log(`[DEBUG] searchData called - term: "${term}", type: "${type}", page: ${page}`);
-            
-            // Special debugging for Profile Name searches
-            if (type === 'Profile Name') {
-                console.log('[DEBUG] Performing search with Profile Name as the search type');
-            }
+    // UNIFIED DATA RETRIEVAL METHODS
 
-            // Get current row count
-            const effectiveRowsPerPage = DropdownContainerModule?.getSelectedRowCount?.() || rowsPerPage;
-            console.log(`[DEBUG] effectiveRowsPerPage: ${effectiveRowsPerPage}`);
+    /**
+     * Fetches data from the API with standardized error handling
+     */
+    async function fetchData(endpoint, params = {}) {
+        // Build query parameters
+        const queryParams = Object.entries(params)
+            .flatMap(([key, value]) => {
+                if (key === 'columns') {
+                    const cols = Array.isArray(value) ? value : [value];
+                    return cols.map(c => `columns=${encodeURIComponent(c)}`);
+                }
+                return [`${key}=${encodeURIComponent(value)}`];
+            })
+            .join('&');
 
-            const columnsQuery = formatColumnsQuery(columns);
-            const url = `${baseUrl}/Search?term=${encodeURIComponent(term)}&type=${encodeURIComponent(type)}&page=${page}&rowsPerPage=${effectiveRowsPerPage}&${columnsQuery}`;
-            console.log(`[DEBUG] Search URL: ${url}`);
+        const url = `/ProductionHistory/${endpoint}${queryParams ? `?${queryParams}` : ''}`;
 
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-            const data = await response.json();
-            
-            console.log(`[DEBUG] Search returned ${data.length} results`);
-            
-            // Check if Profile Name is in the requested columns and in search results
-            if (columns.includes('Profile Name')) {
-                console.log('[DEBUG] Checking search results for Profile Name values:');
-                data.forEach((item, index) => {
-                    console.log(`[DEBUG] Search result ${index} - Profile Name value: ${JSON.stringify(item['Profile Name'])}`);
-                    console.log(`[DEBUG] Full row data for result ${index}:`, item);
-                });
-            }
-            
-            return data;
-        } catch (error) {
-            console.error('Error searching data:', error);
-            throw error;
+        // Execute request
+        const response = await fetch(url, {
+            headers: { 'Connection': 'keep-alive' }
+        });
+
+        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
+        const responseData = await response.json();
+
+        // Update totalCount if this is a count endpoint
+        if (endpoint === "GetCount") {
+            state.totalCount = responseData;
+            state.stashedCount = state.totalCount;
         }
+
+      
+        return responseData;
     }
 
     /**
-     * Enables search mode
+     * Unified method to get data based on current mode and parameters
+     * This replaces all the various data retrieval methods (getPageData, getRangeData, etc.)
+     */
+    async function getData(options = {}) {
+        const { startIndex, count, columns, page, rowsPerPage } = options;
+
+        // Calculate startIndex from page and rowsPerPage if not directly provided
+        const calculatedStartIndex = startIndex !== undefined ? startIndex :
+            (page !== undefined && rowsPerPage !== undefined) ? (page - 1) * rowsPerPage : 0;
+
+        // Use provided count or calculate from rowsPerPage
+        const calculatedCount = count !== undefined ? count :
+            rowsPerPage !== undefined ? rowsPerPage : 10;
+
+        // Base parameters
+        const params = {
+            startIndex: calculatedStartIndex,
+            count: calculatedCount,
+            columns: columns || getColumns()
+        };
+
+        // Add search parameters if in search mode
+        if (state.mode === 'search' && state.search.term) {
+            params.searchTerm = state.search.term;
+            params.searchType = state.search.type;
+        }
+
+        // Add sort parameters if in sort mode
+        if (state.mode === 'sort' && state.sort.column) {
+            params.sortColumn = state.sort.column;
+            params.sortDirection = state.sort.direction;
+        }
+
+        return fetchData('GetData', params);
+    }
+
+    /**
+     * Unified method to get count based on current mode
+     * This replaces all the various count methods (getTotalCount, searchCount, etc.)
+     */
+    async function getCount() {
+        const params = {};
+
+        // Add search parameters if in search mode
+        if (state.mode === 'search' && state.search.term) {
+            params.searchTerm = state.search.term;
+            params.searchType = state.search.type;
+        }
+
+        return fetchData('GetCount', params);
+    }
+
+    // MODE MANAGEMENT METHODS
+
+    /**
+     * Sets search mode
+     */
+    function setSearchMode(term, type) {
+        state.mode = 'search';
+        state.search = { term, type };
+        state.sort = { column: '', direction: '' };
+    }
+
+    /**
+     * Sets sort mode
+     */
+    function setSortMode(column, direction) {
+        state.mode = 'sort';
+        state.sort = { column, direction };
+        state.search = { term: '', type: '' };
+    }
+
+    /**
+     * Sets regular mode
+     */
+    function setRegularMode() {
+        state.mode = 'regular';
+        state.search = { term: '', type: '' };
+        state.sort = { column: '', direction: '' };
+
+    }
+
+    /**
+     * Activates search mode
      */
     function activateSearch(term, type) {
-        console.log(`[DEBUG] Activating search - term: "${term}", type: "${type}"`);
-        
-        // Special debugging for Profile Name searches
-        if (type === 'Profile Name') {
-            console.log('[DEBUG] Activating search with Profile Name as the search type');
-        }
-        
-        _isSearchActive = true;
-        _currentSearchTerm = term;
-        _currentSearchType = type;
+        setSearchMode(term, type);
     }
 
     /**
-     * Disables search mode
+     * Deactivates search mode
      */
     async function deactivateSearch() {
-        console.log('[DEBUG] Deactivating search');
-        
-        _isSearchActive = false;
-        _currentSearchTerm = '';
-        _currentSearchType = '';
-
-        // Refresh count after deactivation
-        try {
-            return await _fetchTotalCount();
-        } catch (error) {
-            console.error('Error refreshing count after search deactivation:', error);
-            throw error;
-        }
+        setRegularMode();
+        return await getCount();
     }
 
     /**
-     * Fetches total count directly
+     * Activates sort mode
      */
-    async function _fetchTotalCount() {
-        console.log('[DEBUG] Fetching total count directly');
-        const response = await fetch(`${baseUrl}/GetTotalCount`);
-        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-        return await response.json();
+    function activateSort(column, direction) {
+        setSortMode(column, direction);
     }
 
-    // Set up event listeners
-    document.addEventListener('search:performed', (event) => {
-        const { term, type } = event.detail;
-        console.log(`[DEBUG] 'search:performed' event received - term: "${term}", type: "${type}"`);
-        activateSearch(term, type);
-    });
+    /**
+     * Deactivates sort mode
+     */
+    async function deactivateSort() {
+        setRegularMode();
+        return state.totalCount;
+    }
 
-    document.addEventListener('search:cleared', () => {
-        console.log('[DEBUG] \'search:cleared\' event received');
-        deactivateSearch();
-    });
+    /**
+     * Handles rows added event
+     */
+    async function handleRowsAdded(rows, count) {
+        if (state.isBusy) return;
+        if (!rows?.length || !count) return;
 
-    // Add utility function to check response data structure
-    function _debugInspectObject(obj, label = '') {
-        console.log(`[DEBUG] Inspecting object${label ? ' ' + label : ''}:`, obj);
-        console.log(`[DEBUG] Object type: ${typeof obj}`);
-        console.log(`[DEBUG] Keys: ${Object.keys(obj).join(', ')}`);
-        
-        // Special check for Profile fields
-        const profileKey = Object.keys(obj).find(key => key === 'Profile' || key === 'Profile Name');
-        if (profileKey) {
-            console.log(`[DEBUG] Found profile key: ${profileKey} with value:`, obj[profileKey]);
+        const columns = getColumns();
+        if (!columns.length) return;
+
+        state.isBusy = true;
+        try {
+            const currentRowCount = getRowCount();
+            const previousRowCount = currentRowCount - count;
+            const startIndex = (state.currentPage - 1) * previousRowCount + previousRowCount;
+
+            // Get data for new rows
+            getData({ startIndex, count, columns })
+                .then(newRowsData => {
+                    // Directly call DataApplierModule
+                    DataApplierModule.applyDataToRows(rows, newRowsData, columns);
+                })
+                .catch(error => {
+                    console.error("Error fetching data for new rows:", error);
+                })
+                .finally(() => {
+                    state.isBusy = false;
+                });
+        } catch (error) {
+            console.error("Error handling rows added:", error);
+            state.isBusy = false;
         }
     }
 
-    // Initialize - add debug log
-    console.log('[DEBUG] TableDataModule initialized');
+    // EVENT HANDLERS
 
-    // Public API
-    return {
-        getPageData,
-        getTotalCount,
-        getRangeJobData,
-        handleRowCountChange,
-        searchData,
-        activateSearch,
-        deactivateSearch,
-        isSearchModeActive: () => _isSearchActive,
-        getCurrentSearchTerm: () => _currentSearchTerm,
-        getCurrentSearchType: () => _currentSearchType,
-        // Debug helper exposed for debugging in browser console
-        debug: {
-            inspectObject: _debugInspectObject,
-            checkProfileName: (data) => {
-                console.log('[DEBUG] Manually checking data for Profile Name:');
-                if (Array.isArray(data)) {
-                    data.forEach((item, index) => {
-                        console.log(`[DEBUG] Item ${index} - Profile Name: ${JSON.stringify(item['Profile Name'])}`);
-                        if (item.Profile) {
-                            console.log(`[DEBUG] Item ${index} - Profile object:`, item.Profile);
-                        }
-                    });
-                } else {
-                    console.log('[DEBUG] Data is not an array, checking single object');
-                    console.log(`[DEBUG] Profile Name: ${JSON.stringify(data['Profile Name'])}`);
-                    if (data.Profile) {
-                        console.log('[DEBUG] Profile object:', data.Profile);
-                    }
+    const handlers = {
+        /**
+         * Handles page changed event
+         */
+        async pageChanged(event) {
+            if (state.isBusy) return;
+
+            state.isBusy = true;
+
+            const { page, rows, columns, rowsPerPage } = event.detail;
+            if (!columns?.length) return;
+
+            try {
+                // Update current page
+                state.currentPage = page;
+
+                // Get counts if needed
+                if (state.totalCount === null) {
+                    state.totalCount = await getCount();
                 }
+
+                const totalCount = state.totalCount;
+                const currentRowsPerPage = rowsPerPage || getRowsPerPage();
+
+                // Calculate items for this page
+                const startIndex = (page - 1) * currentRowsPerPage;
+                const itemsOnThisPage = Math.min(currentRowsPerPage, totalCount - startIndex);
+
+                // Check for valid page
+                if (startIndex >= totalCount) {
+                    const maxValidPage = Math.max(1, Math.ceil(totalCount / currentRowsPerPage));
+
+                    dispatchEvent('pageOutOfBounds', {
+                        currentPage: page,
+                        maxValidPage,
+                        totalCount,
+                        rowsPerPage: currentRowsPerPage
+                    });
+
+                    return;
+                }
+
+                // Fetch page data
+                const pageData = await getData({
+                    page,
+                    rowsPerPage: currentRowsPerPage,
+                    columns
+                });
+
+                // Dispatch event with data
+                dispatchEvent('pageDataFetched', {
+                    page,
+                    rowCount: itemsOnThisPage,
+                    totalCount,
+                    rows,
+                    data: pageData,
+                    columns,
+                    currentRowCount: getRowCount(),
+                    needsRowUpdate: getRowCount() !== itemsOnThisPage
+                });
+
+                // Update pagination
+         
+                updatePagination(page, totalCount, currentRowsPerPage);
+            } catch (error) {
+                console.error('Error during page change:', error);
+            } finally {
+                state.isBusy = false;
             }
+        },
+
+        /**
+         * Handles column added event
+         */
+        async columnAdded(event) {
+            if (state.isBusy) return;
+
+            const { column, page, rowCount, columnIndex } = event.detail;
+            if (!column) return;
+
+            state.isBusy = true;
+            try {
+                const startIndex = (page - 1) * rowCount;
+                const columnData = await getData({
+                    startIndex,
+                    count: rowCount,
+                    columns: [column]
+                });
+
+                dispatchEvent('columnDataFetched', {
+                    column,
+                    columnIndex,
+                    data: columnData,
+                    page,
+                    rowCount,
+                    startIndex
+                });
+            } finally {
+                state.isBusy = false;
+            }
+        },
+
+        /**
+         * Handles search performed event
+         */
+        async searchPerformed(event) {
+            if (state.isBusy) return;
+
+            const { term, type, rowCount } = event.detail;
+            if (!term || !type) return;
+
+            state.isBusy = true;
+            try {
+                // Activate search mode
+                setSearchMode(term, type);
+
+                // Get columns and count
+                const columns = getColumns();
+                const searchCount = await getCount();
+
+                // Reset to page 1
+                state.currentPage = 1;
+
+                // Calculate rows to display
+                const rowsPerPage = DropdownContainerModule.getLastSelectedRow();
+                const rowsToShow = Math.min(rowsPerPage, searchCount);
+
+                // Fetch search results
+                const searchResults = await getData({
+                    page: 1,
+                    rowsPerPage: rowsToShow,
+                    columns
+                });
+
+                // Dispatch event with results
+                dispatchEvent('searchDataFetched', {
+                    term,
+                    type,
+                    page: 1,
+                    rowCount: rowsToShow,
+                    totalResults: searchCount,
+                    columns,
+                    data: searchResults,
+                    currentRowCount: getRowCount(),
+                    needsRowUpdate: getRowCount() !== rowsToShow
+                });
+
+                // Update pagination
+                updatePagination(1, searchCount, rowsPerPage);
+            } finally {
+                state.isBusy = false;
+            }
+        },
+
+        /**
+         * Handles search cleared event
+         */
+        async searchCleared() {
+            if (state.isBusy) return;
+
+            state.isBusy = true;
+            try {
+                // Deactivate search
+                const totalCount = await deactivateSearch();
+
+                // Reset to page 1
+                state.currentPage = 1;
+
+                // Get display settings
+                const columns = getColumns();
+                const rowsPerPage = getRowsPerPage();
+                const rowsToShow = Math.min(rowsPerPage, totalCount);
+
+                // Fetch normal data
+                const normalData = await getData({
+                    page: 1,
+                    rowsPerPage: rowsToShow,
+                    columns
+                });
+
+                // Dispatch event with data
+                dispatchEvent('searchCleared', {
+                    page: 1,
+                    rowCount: rowsToShow,
+                    totalCount,
+                    columns,
+                    data: normalData,
+                    currentRowCount: getRowCount(),
+                    needsRowUpdate: getRowCount() !== rowsToShow
+                });
+
+                // Update pagination
+                updatePagination(1, totalCount, rowsPerPage);
+            } finally {
+                state.isBusy = false;
+            }
+        },
+
+        /**
+         * Handles sort applied event
+         */
+        async sortApplied(event) {
+            if (state.isBusy) return;
+
+            const { column, direction, columns } = event.detail;
+            if (!column || !direction || !columns?.length) return;
+
+            state.isBusy = true;
+            try {
+                // Activate sort mode
+                setSortMode(column, direction);
+
+                // Get total count
+                
+                const totalCount = await getCount();
+
+                // Reset to page 1
+                state.currentPage = 1;
+
+                // Get display settings
+                const rowsPerPage = getRowsPerPage();
+                const rowsToShow = Math.min(rowsPerPage, totalCount);
+
+                // Fetch sorted data
+                const sortedData = await getData({
+                    page: 1,
+                    rowsPerPage: rowsToShow,
+                    columns
+                });
+
+                // Dispatch event with data
+                dispatchEvent('sortDataFetched', {
+                    column,
+                    direction,
+                    page: 1,
+                    rowCount: rowsToShow,
+                    totalCount,
+                    columns,
+                    data: sortedData,
+                    currentRowCount: getRowCount(),
+                    needsRowUpdate: getRowCount() !== rowsToShow
+                });
+
+                // Update pagination
+                updatePagination(1, totalCount, rowsPerPage);
+            } finally {
+                state.isBusy = false;
+            }
+        },
+
+        /**
+         * Handles sort cleared event
+         */
+        async sortCleared() {
+            if (state.isBusy) return;
+
+            state.isBusy = true;
+            try {
+                // Deactivate sort
+                const totalCount = await deactivateSort();
+                
+
+                // Reset to page 1
+                state.currentPage = 1;
+
+                // Get display settings
+                const columns = getColumns();
+                const rowsPerPage = getRowsPerPage();
+                const rowsToShow = Math.min(rowsPerPage, totalCount);
+
+                // Fetch normal data
+                const normalData = await getData({
+                    page: 1,
+                    rowsPerPage: rowsToShow,
+                    columns
+                });
+
+                // Dispatch event with data
+                dispatchEvent('sortCleared', {
+                    page: 1,
+                    rowCount: rowsToShow,
+                    totalCount,
+                    columns,
+                    data: normalData,
+                    currentRowCount: getRowCount(),
+                    needsRowUpdate: getRowCount() !== rowsToShow
+                });
+
+                // Update pagination
+                updatePagination(1, totalCount, rowsPerPage);
+            } finally {
+                state.isBusy = false;
+            }
+        },
+
+        /**
+         * Handles sort indicator sort event
+         */
+        sortIndicatorSort(event) {
+            const { direction, columnName } = event.detail;
+
+            // Update sort state
+            setSortMode(columnName, direction);
+
+            // Trigger data fetch
+            document.dispatchEvent(new CustomEvent('sort:applied', {
+                bubbles: true,
+                detail: {
+                    column: columnName,
+                    direction,
+                    columns: getColumns()
+                }
+            }));
+        }
+    };
+
+    // PUBLIC API
+    return {
+        // Unified data retrieval methods
+        getData,
+        getCount,
+
+        // Legacy compatibility methods
+        getPageData(page, rowsPerPage, columns) {
+            return getData({ page, rowsPerPage, columns });
+        },
+
+        getTotalCount() {
+            return getCount();
+        },
+
+        getRangeJobData(columns, startIndex, count) {
+            return getData({ columns, startIndex, count });
+        },
+
+        handleRowCountChange(currentPage, currentRowCount, rowCountChange, columns) {
+            const startIndex = (currentPage - 1) * currentRowCount + currentRowCount;
+            return getData({ startIndex, count: rowCountChange, columns });
+        },
+
+        // Mode management methods
+        activateSearch,
+        activateSort,
+        deactivateSearch,
+        deactivateSort,
+        getStoredCount: () => state.totalCount,
+        handleRowsAdded,
+
+        // State accessors
+        isSearchModeActive: () => state.mode === 'search',
+        isSortModeActive: () => state.mode === 'sort',
+        getCurrentSearchTerm: () => state.search.term,
+        getCurrentSearchType: () => state.search.type,
+        getCurrentSortColumn: () => state.sort.column,
+        getCurrentSortDirection: () => state.sort.direction,
+        getCurrentPage: () => state.currentPage,
+        setCurrentPage: (page) => { state.currentPage = page; },
+
+        // Initialization
+        initialize() {
+            document.addEventListener('pagination:pageChanged', handlers.pageChanged);
+            document.addEventListener('columnManager:columnAdded', handlers.columnAdded);
+            document.addEventListener('search:performed', handlers.searchPerformed);
+            document.addEventListener('search:cleared', handlers.searchCleared);
+            document.addEventListener('sort:applied', handlers.sortApplied);
+            document.addEventListener('sort:cleared', handlers.sortCleared);
+            document.addEventListener('sortIndicator:sort', handlers.sortIndicatorSort);
+
+            return this;
         }
     };
 })();

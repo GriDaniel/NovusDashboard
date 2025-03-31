@@ -1,7 +1,7 @@
 ﻿/**
- * @module SearchElementManager
+ * @title SearchElementManager
+ * @description   Manages search-related elements
  * @author Daniel Oliveira
- * @description Manages the caching and retrieval of search-specific elements and class names
  */
 const SearchElementManager = (function () {
     let instance = null;
@@ -9,7 +9,7 @@ const SearchElementManager = (function () {
     function createSearchManager(container) {
         const manager = BaseElementManager.createElementManager('search', container);
 
-        // Setup all the class names the search module implementation depends on
+        // CLASS NAMES SETUP
         const classNames = {
             searchInput: 'search-input',
             clearButton: 'clear-button',
@@ -21,7 +21,7 @@ const SearchElementManager = (function () {
         };
         Object.entries(classNames).forEach(([key, value]) => manager.setClassName(key, value));
 
-        // Element getters
+        // ELEMENT ACCESS METHODS
         manager.getSearchInput = forceQuery =>
             manager.getElement(`.${manager.getClassName('searchInput')}`, "getSearchInput()", forceQuery);
 
@@ -42,21 +42,64 @@ const SearchElementManager = (function () {
 
         manager.getHiddenClass = () => manager.getClassName('hidden');
 
+        // DOM MANIPULATION METHODS
+        manager.updatePlaceholder = function (input, placeholderText) {
+            if (!input) return;
+
+            DOMUtils.batchUpdate(() => {
+                input.placeholder = placeholderText;
+            });
+        };
+
+        manager.updateClearButtonVisibility = function (clearButton, isVisible) {
+            if (!clearButton) return;
+
+            DOMUtils.batchUpdate(() => {
+                if (isVisible) {
+                    clearButton.classList.remove(this.getClassName('hidden'));
+                } else {
+                    clearButton.classList.add(this.getClassName('hidden'));
+                }
+            });
+        };
+
+        manager.clearSearchInput = function (input, clearButton, container) {
+            if (!input) return;
+
+            DOMUtils.batchUpdate(() => {
+                input.value = '';
+
+                if (clearButton) {
+                    clearButton.classList.add(this.getClassName('hidden'));
+                }
+
+                if (container) {
+                    container.textContent = '';
+                }
+            });
+        };
+
+        manager.setSearchResultText = function (container, text) {
+            if (!container) return;
+
+            DOMUtils.batchUpdate(() => {
+                container.textContent = text;
+            });
+        };
+
         return manager;
     }
 
-    // Public API
+    // PUBLIC API
     return {
         initialize(container) {
             if (!instance) instance = createSearchManager(container);
             return instance;
         },
 
-        getInstance() {
-            return instance;
-        },
+        getInstance: () => instance,
 
-        // Initialize an instance of all methods
+        // Element access methods
         getSearchInput: forceQuery => instance?.getSearchInput(forceQuery) ?? null,
         getClearIcon: forceQuery => instance?.getClearIcon(forceQuery) ?? null,
         getSearchContainer: forceQuery => instance?.getSearchContainer(forceQuery) ?? null,
@@ -64,6 +107,22 @@ const SearchElementManager = (function () {
         getSearchArea: forceQuery => instance?.getSearchArea(forceQuery) ?? null,
         getSearchResultsContainer: forceQuery => instance?.getSearchResultsContainer(forceQuery) ?? null,
         getHiddenClass: () => instance?.getHiddenClass() ?? 'd-none',
+
+        // DOM manipulation methods
+        updatePlaceholder: (input, placeholderText) => {
+            if (instance) instance.updatePlaceholder(input, placeholderText);
+        },
+        updateClearButtonVisibility: (clearButton, isVisible) => {
+            if (instance) instance.updateClearButtonVisibility(clearButton, isVisible);
+        },
+        clearSearchInput: (input, clearButton, container) => {
+            if (instance) instance.clearSearchInput(input, clearButton, container);
+        },
+        setSearchResultText: (container, text) => {
+            if (instance) instance.setSearchResultText(container, text);
+        },
+
+        // Base methods
         clearCache: () => instance?.clearCache()
     };
 })();

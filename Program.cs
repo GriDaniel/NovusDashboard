@@ -1,7 +1,10 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using NovusDashboard.Services;
+using NovusDashboard.Services.ProductionHistory;
 using NovusDashboard.wwwroot.Configuration;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +22,8 @@ builder.Services.AddSingleton<IMongoClient, MongoClient>(sp =>
 });
 builder.Services.AddSingleton<MongoDBService>();
 builder.Services.AddSingleton<CollectionService>();
-builder.Services.AddScoped<TableStateService>();
+builder.Services.AddScoped<TablePreferencesService>();
+builder.Services.AddSingleton<BundleManagerService>();
 // Ensure directory exists
 var appDataPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "tabledata");
 if (!Directory.Exists(appDataPath))
@@ -28,6 +32,9 @@ if (!Directory.Exists(appDataPath))
 }
 
 var app = builder.Build();
+
+app.UseStaticFiles();
+
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

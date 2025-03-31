@@ -1,115 +1,188 @@
 ﻿/**
- * @module PaginationManagerModule
+ * @title PaginationModule
+ * @description  Handles pagination interactions and dynamic page navigation
  * @author Daniel Oliveira
- * @description Handles interactions with the pagination buttons and
- *              dynamic setting of the min/max page values
  */
 const PaginationModule = (function () {
+    // Core state
     let currentPage = 1;
     let totalPages = 1;
     let rowsPerPage = 10; // Default rows per page
+
+    // Navigation tracking
+    let pendingNavigations = new Map(); // Maps page numbers to timestamps
+    let lastDispatchedPage = null;
+
+    // Request cancellation
+    let abortController = null;
+
+    // PAGE STATE MANAGEMENT METHODS
 
     /**
      * Recalculates pages based on total items and updates UI
      */
     async function updateMaxPages() {
-        // Get rows per page if available
-        if (RowManagerModule?.getRowCount) {
-            rowsPerPage = RowManagerModule.getRowCount();
-        }
-
         try {
+            rowsPerPage = DropdownContainerModule.getSelectedRowCount();
+
+            // Fetch count directly
             const totalItemCount = await TableDataModule.getTotalCount();
             const newTotalPages = Math.max(1, Math.ceil(totalItemCount / rowsPerPage));
 
-            // Only update if changed
+            // Update if needed
             if (newTotalPages !== totalPages) {
                 totalPages = newTotalPages;
+                updateMaxPageUI();
             }
 
-            // Update page count display
-            const maxPageEl = PaginationElementManager.getMaxPage();
-            if (maxPageEl) {
-                maxPageEl.textContent = `${totalPages} page${totalPages !== 1 ? 's' : ''}`;
-            }
-
-            // Fix current page if needed
+            // Fix page if needed
             if (currentPage > totalPages) {
-                await goToPage(totalPages);
+                goToPage(totalPages);
             } else {
                 updateButtonStates();
             }
         } catch (error) {
             console.error('Error updating pagination:', error);
             totalPages = 1;
+            updateMaxPageUI();
 
-            // Reset UI on error
-            const maxPageEl = PaginationElementManager.getMaxPage();
-            if (maxPageEl) maxPageEl.textContent = '1 page';
-
-            if (currentPage !== 1) await goToPage(1);
+            if (currentPage !== 1) goToPage(1);
         }
     }
 
-    /**
-     * Updates page number in the UI
-     */
-    function updateCurrentPage() {
-        const currentPageEl = PaginationElementManager.getCurrentPage();
-        if (currentPageEl) {
-            currentPageEl.textContent = currentPage;
+   
+
+    function setMaxPage(pages) {
+        // Ensure valid number
+        pages = Math.max(1, Math.floor(pages));
+
+        // Only update if changed
+        if (pages !== totalPages) {
+            totalPages = pages;
+            updateMaxPageUI();
+
         }
-        updateButtonStates();
+
+        return totalPages;
+    }
+
+    // UI UPDATE METHODS
+
+    /**
+     * Updates current page display in the UI
+     */
+    function updateCurrentPageUI() {
+        PaginationElementManager.setCurrentPageText(currentPage);
+    }
+
+    /**
+     * Updates max page display in the UI
+     */
+    function updateMaxPageUI() {
+        PaginationElementManager.setMaxPageText(totalPages);
     }
 
     /**
      * Updates navigation button states
      */
     function updateButtonStates() {
-        const buttons = {
-            prev: PaginationElementManager.getPrevious(),
-            fastBack: PaginationElementManager.getFastBackward(),
-            next: PaginationElementManager.getNext(),
-            fastForward: PaginationElementManager.getFastForward()
-        };
-
-        // Disable/enable buttons based on current page
-        if (buttons.prev) buttons.prev.classList.toggle('disabled', currentPage <= 1);
-        if (buttons.fastBack) buttons.fastBack.classList.toggle('disabled', currentPage <= 1);
-        if (buttons.next) buttons.next.classList.toggle('disabled', currentPage >= totalPages);
-        if (buttons.fastForward) buttons.fastForward.classList.toggle('disabled', currentPage >= totalPages);
+        PaginationElementManager.updateButtonStates(currentPage, totalPages);
     }
 
+    // NAVIGATION METHODS
+
     /**
-     * Changes to specified page
+     * Changes to specified page with optimized event dispatching
      */
-    async function goToPage(page) {
+    function goToPage(page, forceFlag) {
         // Ensure page is within valid range
         page = Math.max(1, Math.min(page, totalPages));
-
-        if (page !== currentPage) {
+       
+        // Only process valid page changes
+        if (page !== null) {
             const previousPage = currentPage;
+
+            // Update state immediately
             currentPage = page;
-            updateCurrentPage();
-
-            // Get needed data references
-            const rows = RowManagerModule.getAllRows();
-            const columns = ColumnElementManager.getColumnHeaders();
-
-            // Notify about page change
-            document.dispatchEvent(new CustomEvent('pagination:pageChanged', {
-                bubbles: true,
-                detail: { previousPage, page: currentPage, rows, columns, rowsPerPage }
-            }));
-        } else {
+            updateCurrentPageUI();
             updateButtonStates();
+
+            // Dispatch event with minimal delay
+            
+            dispatchPageChangeEvent(previousPage, currentPage, forceFlag);
+        } else {
+            // Just update UI
+            updateButtonStates();
+        }
+
+        // Return a resolved promise to maintain API compatibility
+        return Promise.resolve();
+    }
+
+    // EVENT HANDLING METHODS
+
+    /**
+     * Creates and dispatches a page change event with minimal delay
+     */
+    function dispatchPageChangeEvent(previousPage, newPage, forceFlag) {
+       
+        // Cancel any in-progress request
+        if (abortController) {
+            abortController.abort();
+        }
+       
+        // Create a new abort controller for this request
+        abortController = new AbortController();
+
+        // Get required data synchronously
+        const rows = RowManagerModule.getAllRows();
+        const columns = ColumnElementManager.getColumnHeaders();
+
+        // Record this navigation attempt
+        const timestamp = Date.now();
+        pendingNavigations.set(newPage, timestamp);
+        lastDispatchedPage = newPage;
+
+        // Only dispatch if needed data is available
+        if (!columns || !rows) {
+            console.error('Missing data - cannot dispatch page change event');
+            return;
+        }
+      
+        // Dispatch event immediately without waiting
+        if (!forceFlag) {
+            requestAnimationFrame(() => {
+                // Only dispatch if this is still the most recent request
+                if (pendingNavigations.get(newPage) === timestamp) {
+                    document.dispatchEvent(new CustomEvent('pagination:pageChanged', {
+                        bubbles: true,
+                        detail: {
+                            previousPage,
+                            page: newPage,
+                            rows,
+                            columns,
+                            rowsPerPage,
+                            signal: abortController.signal,
+                            timestamp
+                        }
+                    }));
+                }
+            });
         }
     }
 
     /**
-     * Sets up button click handlers
+     * Sets up event listeners with optimized handlers
      */
     function setupEventListeners() {
+        setupNavigationButtonListeners();
+        setupDataEventListeners();
+        setupSortSearchEventListeners();
+        setupRowCountChangeListener();
+        setupPaginationStateListener();
+    }
+
+    function setupNavigationButtonListeners() {
         const buttons = {
             next: PaginationElementManager.getNext(),
             prev: PaginationElementManager.getPrevious(),
@@ -117,116 +190,157 @@ const PaginationModule = (function () {
             fastBack: PaginationElementManager.getFastBackward()
         };
 
-        // Add click handlers for each button
+        // Add optimized click handlers
         if (buttons.next) {
-            buttons.next.addEventListener('click', function () {
-                if (!this.classList.contains('disabled')) goToPage(currentPage + 1);
+            buttons.next.addEventListener('click', function(e) {
+                if (!this.classList.contains('disabled')) {
+                    e.preventDefault();
+                    goToPage(currentPage + 1);
+                }
             });
         }
 
         if (buttons.prev) {
-            buttons.prev.addEventListener('click', function () {
-                if (!this.classList.contains('disabled')) goToPage(currentPage - 1);
+            buttons.prev.addEventListener('click', function(e) {
+                if (!this.classList.contains('disabled')) {
+                    e.preventDefault();
+                    goToPage(currentPage - 1);
+                }
             });
         }
 
         if (buttons.fastForward) {
-            buttons.fastForward.addEventListener('click', function () {
-                if (!this.classList.contains('disabled')) goToPage(totalPages);
+            buttons.fastForward.addEventListener('click', function(e) {
+                if (!this.classList.contains('disabled')) {
+                    e.preventDefault();
+                    goToPage(totalPages);
+                }
             });
         }
 
         if (buttons.fastBack) {
-            buttons.fastBack.addEventListener('click', function () {
-                if (!this.classList.contains('disabled')) goToPage(1);
+            buttons.fastBack.addEventListener('click', function(e) {
+                if (!this.classList.contains('disabled')) {
+                    e.preventDefault();
+                    goToPage(1);
+                }
             });
         }
     }
 
-    /**
-     * Sets up listeners for data changes that affect pagination
-     */
-    function setupRowCountListeners() {
-        // Event registration for search events
-        document.addEventListener('search:performed', updateMaxPages);
-        document.addEventListener('search:cleared', updateMaxPages);
-        document.addEventListener('dataApplier:searchApplied', updateMaxPages);
-        document.addEventListener('dataApplier:searchCleared', updateMaxPages);
+    function setupDataEventListeners() {
+        // Listen for data loading completion
+        document.addEventListener('dataApplier:pageDataApplied', function(event) {
+            // Clean up navigation tracking
+            if (event.detail?.page) {
+                pendingNavigations.delete(event.detail.page);
+            }
+        });
     }
 
-    // Handle row count changes from dropdown
-    document.addEventListener('dropdown:rowCountChanged', async (event) => {
-        if (event.detail?.rowCount) {
-            rowsPerPage = event.detail.rowCount;
-
-            try {
-                // Recalculate pagination
-                const totalItemCount = await TableDataModule.getTotalCount();
-                totalPages = Math.max(1, Math.ceil(totalItemCount / rowsPerPage));
-
-                // Update UI
-                const maxPageEl = PaginationElementManager.getMaxPage();
-                if (maxPageEl) {
-                    maxPageEl.textContent = `${totalPages} page${totalPages !== 1 ? 's' : ''}`;
-                }
-
-                // Fix page number if needed
-                if (currentPage > totalPages) {
-                    await goToPage(totalPages);
-                } else {
-                    updateButtonStates();
-                }
-
-                // Notify about the change
-                document.dispatchEvent(new CustomEvent('pagination:rowCountUpdated', {
-                    bubbles: true,
-                    detail: { page: currentPage, rowsPerPage }
-                }));
-            } catch (error) {
-                console.error('Error updating pagination after row count change:', error);
+    function setupSortSearchEventListeners() {
+        // Handle sorting and search events
+        document.addEventListener('sort:applied', (event) => {
+            if (event.detail && currentPage !== 1) {
+                goToPage(1);
             }
-        }
-    });
+        });
 
-    // Handle pagination state updates
-    document.addEventListener('pagination:stateUpdated', async (event) => {
-        if (event.detail) {
-            const { page, totalPages: newTotalPages, totalCount } = event.detail;
+        document.addEventListener('sort:cleared', (event) => {
+            if (currentPage !== 1) {
+                goToPage(1);
+            }
+        });
 
-            // Update total pages directly if provided
-            if (newTotalPages !== undefined) {
-                totalPages = newTotalPages;
-                const maxPageEl = PaginationElementManager.getMaxPage();
-                if (maxPageEl) {
-                    maxPageEl.textContent = `${totalPages} page${totalPages !== 1 ? 's' : ''}`;
+        document.addEventListener('search:performed', (event) => {
+            if (currentPage !== 1) {
+                goToPage(1, true);
+            }
+        });
+
+        document.addEventListener('search:cleared', (event) => {
+            if (currentPage !== 1) {
+                goToPage(1, true);
+            }
+        });
+    }
+
+    function setupRowCountChangeListener() {
+        // Handle row count changes
+        document.addEventListener('dropdown:rowCountChanged', async (event) => {
+            if (event.detail?.rowCount) {
+                rowsPerPage = event.detail.rowCount;
+                
+                try {
+                    // Recalculate pagination
+                    const totalItemCount = TableDataModule.getStoredCount();
+                    console.log("stored coint is", totalItemCount);
+                    totalPages = Math.max(1, Math.ceil(totalItemCount / rowsPerPage));
+                    
+                    // Update UI
+                    updateMaxPageUI();
+                    
+                    // Fix page if needed
+                    if (currentPage > totalPages) {
+                        
+                       
+                    } else {
+                        updateButtonStates();
+                        // Notify about the change
+                        
+                        document.dispatchEvent(new CustomEvent('pagination:rowCountUpdated', {
+                            bubbles: true,
+                            detail: { page: currentPage, rowsPerPage }
+                        }));
+                    }
+                } catch (error) {
+                    console.error('Error updating pagination after row count change:', error);
                 }
             }
-            // Recalculate if total count available
-            else if (totalCount !== undefined) {
-                // Get current rows per page setting
-                const currentRowsPerPage = DropdownContainerModule?.getSelectedRowCount?.() || rowsPerPage;
+        });
+    }
 
-                // Recalculate pages
-                const calculatedTotalPages = Math.max(1, Math.ceil(totalCount / currentRowsPerPage));
-
-                if (calculatedTotalPages !== totalPages) {
-                    totalPages = calculatedTotalPages;
-                    const maxPageEl = PaginationElementManager.getMaxPage();
-                    if (maxPageEl) {
-                        maxPageEl.textContent = `${totalPages} page${totalPages !== 1 ? 's' : ''}`;
+    function setupPaginationStateListener() {
+        // Handle pagination state updates
+        document.addEventListener('pagination:stateUpdated', (event) => {
+            if (event.detail) {
+                const { page, totalPages: newTotalPages, totalCount } = event.detail;
+                
+                // Update total pages if provided
+                if (newTotalPages !== undefined) {
+                    totalPages = newTotalPages;
+                    updateMaxPageUI();
+                    
+                    if (totalPages === 1) {
+                        DropdownContainerModule.enableAllResults(totalCount);
+                        DropdownContainerModule.setSelectedRowCount(totalCount);
+                    } else {
+                        DropdownContainerModule.disableAllResults();
                     }
                 }
-            }
+                // Recalculate if total count available
+                else if (totalCount !== undefined) {
+                    const currentRowsPerPage = DropdownContainerModule?.getSelectedRowCount?.() || rowsPerPage;
+                    const calculatedTotalPages = Math.max(1, Math.ceil(totalCount / currentRowsPerPage));
 
-            // Update navigation
-            updateButtonStates();
+                    if (calculatedTotalPages !== totalPages) {
+                        totalPages = calculatedTotalPages;
+                        updateMaxPageUI();
+                    }
+                }
 
-            // Fix current page if needed
-            if (currentPage > totalPages) {
-                await goToPage(totalPages);
+                // Update navigation
+                updateButtonStates();
+
+                // Fix page if needed
+                if (currentPage > totalPages) {
+                    goToPage(totalPages);
+                }
             }
-        }
-    });
+        });
+    }
+
+    // INITIALIZATION
 
     /**
      * Sets up the pagination system
@@ -239,14 +353,12 @@ const PaginationModule = (function () {
 
         await updateMaxPages();
         currentPage = 1;  // Start at first page
-        updateCurrentPage();
+        updateCurrentPageUI();
         setupEventListeners();
-        setupRowCountListeners();
 
         // Final sync check after short delay
-        setTimeout(async () => {
-            await updateMaxPages();
-            updateButtonStates();
+        setTimeout(() => {
+            updateMaxPages();
         }, 100);
     }
 
@@ -256,14 +368,10 @@ const PaginationModule = (function () {
         goToPage,
         updateMaxPages,
         updateButtonStates,
+        setMaxPage,
         getCurrentPage: () => currentPage,
         getTotalPages: () => totalPages,
         getRowsPerPage: () => rowsPerPage,
-        setRowsPerPage: (count) => {
-            if (count > 0) {
-                rowsPerPage = count;
-                updateMaxPages();
-            }
-        }
+        getPendingNavigationCount: () => pendingNavigations.size
     };
 })();

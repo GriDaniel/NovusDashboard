@@ -1,132 +1,73 @@
 ﻿/**
- * @module ColumnManagerModule
+ * @title ColumnManagerModule
+ * @description  Manages the creation and deletion of table columns
  * @author Daniel Oliveira
- * @description Manages the creation and deletion of table columns 
  */
 const ColumnManagerModule = (function () {
     let instance = null;
-    let activeSort = { column: null, direction: null };
 
     class ColumnManager {
         constructor() {
-            // Verify that the dependency on the column element manager is established
+            // Verify dependencies
             if (!ColumnElementManager.getInstance()) {
                 throw new Error('ColumnElementManager must be initialized before ColumnManagerModule');
             }
-            // Define the insertion point for appending columns
+
+            // Initialize SortIndicatorModule if needed
+            if (!SortIndicatorElementManager.getInstance()) {
+                SortIndicatorElementManager.initialize(document.body);
+            }
+
+            if (!SortIndicatorModule.getInstance()) {
+                SortIndicatorModule.initialize();
+            }
+
+            // Get column insertion point
             this.columnInsertionPoint = ColumnElementManager.getColumnInsertionPoint();
             if (!this.columnInsertionPoint) {
                 throw new Error('Column insertion point not found');
             }
-            // Set a local reference for the column count using the cached value
+
+            // Set column count from cache
             this.columnCount = ColumnElementManager.getColumnCount();
 
-            // Initialize the setup for the sort indicators
+            // Initialize sort indicators
             this.initializeSortIndicators();
         }
 
-        // Manage the state of the sort (ascending and descending) button indicators
+        // INITIALIZATION METHODS
+
         initializeSortIndicators() {
-            ColumnElementManager.getAllColumns(true).forEach(column =>
-                this.setupColumnSortIndicators(column));
+            ColumnElementManager.getAllColumns(true).forEach((column, index) =>
+                this.setupColumnSortIndicators(column, index));
         }
 
-        setupColumnSortIndicators(column) {
+        setupColumnSortIndicators(column, columnIndex) {
             if (!column) return;
 
-            const sortIndicators = column.querySelector(`.${ColumnElementManager.getSortIndicatorsClass()}`);
-            if (!sortIndicators) return;
+            const sortIndicatorPlaceholder = column.querySelector(`.${ColumnElementManager.getSortIndicatorPlaceholderClass()}`);
+            if (!sortIndicatorPlaceholder) return;
 
-            const upTriangle = sortIndicators.querySelector(`.${ColumnElementManager.getTriangleUpClass()}`);
-            const downTriangle = sortIndicators.querySelector(`.${ColumnElementManager.getTriangleDownClass()}`);
-            if (!upTriangle || !downTriangle) return;
+            // Get column title/name
+            const titleElement = column.querySelector(`.${ColumnElementManager.getColumnTitleClass()}`);
+            const columnName = titleElement ? titleElement.textContent.trim() : '';
 
-            // Apply styles to the sort indicators
-            DOMUtils.batchUpdate(() => {
-               
-                [upTriangle, downTriangle].forEach(triangle => {
-                    triangle.classList.add('disabled');
-                    triangle.style.cursor = 'pointer';
-                    triangle.style.scale = 1.5;
-                });
-
-               
-                sortIndicators.style.gap = '10px';
-                sortIndicators.style.marginBottom = '6px';
-            });
-
-            // Add event listeners
-            upTriangle.addEventListener('click', e => {
-                e.stopPropagation();
-                this.handleSortIndicatorClick(column, 'up');
-            });
-
-            downTriangle.addEventListener('click', e => {
-                e.stopPropagation();
-                this.handleSortIndicatorClick(column, 'down');
+            // Register with SortIndicatorModule with enhanced metadata
+            SortIndicatorModule.registerContainer(sortIndicatorPlaceholder, columnIndex, {
+                source: 'column',
+                columnName: columnName
             });
         }
 
-        handleSortIndicatorClick(column, direction) {
-            const columnIndex = Array.from(ColumnElementManager.getAllColumns(true)).indexOf(column);
+        // COLUMN CREATION METHODS
 
-            // Toggle the sort indicator if it has the same column/direction
-            if (activeSort.column === column && activeSort.direction === direction) {
-                this.clearAllSortIndicators();
-                activeSort = { column: null, direction: null };
-                return;
-            }
-            // Clear all other sort indicators to ensure only one is active at a time
-            this.clearAllSortIndicators();
-
-            // Get the indicators for this column
-            const sortIndicators = column.querySelector(`.${ColumnElementManager.getSortIndicatorsClass()}`);
-            const upTriangle = sortIndicators.querySelector(`.${ColumnElementManager.getTriangleUpClass()}`);
-            const downTriangle = sortIndicators.querySelector(`.${ColumnElementManager.getTriangleDownClass()}`);
-
-            // Enable the singular sort indicator that was clicked
-            DOMUtils.batchUpdate(() => {
-                if (direction === 'up') {
-                    upTriangle.classList.remove('disabled');
-                } else {
-                    downTriangle.classList.remove('disabled');
-                }
-            });
-
-            // Update the sort indicator state
-            activeSort = { column, direction };
-
-            // Dispatch the event
-            this._dispatchColumnEvent('columnSort', { columnIndex, direction, column });
-        }
-
-        // Disables all sort indicators
-        clearAllSortIndicators() {
-            const columns = ColumnElementManager.getAllColumns(true);
-
-            DOMUtils.batchUpdate(() => {
-                columns.forEach(column => {
-                    const sortIndicators = column.querySelector(`.${ColumnElementManager.getSortIndicatorsClass()}`);
-                    if (!sortIndicators) return;
-
-                    const upTriangle = sortIndicators.querySelector(`.${ColumnElementManager.getTriangleUpClass()}`);
-                    const downTriangle = sortIndicators.querySelector(`.${ColumnElementManager.getTriangleDownClass()}`);
-
-                    // Initiate disable 
-                    if (upTriangle) upTriangle.classList.add('disabled');
-                    if (downTriangle) downTriangle.classList.add('disabled');
-                });
-            });
-        }
-
-        // Create a column with a title
         createColumn(title) {
             const column = ColumnElementManager.createColumnTemplate(title);
-            this.setupColumnSortIndicators(column);
+            const columnIndex = this.columnCount; // Get index before we increment it
+            this.setupColumnSortIndicators(column, columnIndex);
             return column;
         }
 
-        // addColumn extender incase multiple column addition is necessary
         addColumns(count, columnHeaders) {
             count = parseInt(count, 10) || 0;
             if (count <= 0) return [];
@@ -146,7 +87,7 @@ const ColumnManagerModule = (function () {
             }
 
             // Add the columns to the DOM using the insertion point
-            this.columnInsertionPoint.appendChild(fragment);
+            ColumnElementManager.appendColumns(addedColumns, this.columnInsertionPoint);
             this.columnCount += count;
             ColumnElementManager.setColumnCount(this.columnCount);
 
@@ -162,37 +103,32 @@ const ColumnManagerModule = (function () {
             return addedColumns;
         }
 
-        // Add a singular column with a title
         addColumn(title) {
             return this.addColumns(1, [title])[0];
         }
 
-        // Creates the row-cells for 1 (assumed) column
-        createCellsForColumn(columnCount = 1) {
-            const createdCells = [];
+        // CELL MANAGEMENT METHODS
 
+        createCellsForColumn(columnCount = 1) {
             if (!RowElementManager.getInstance()) {
                 console.error('RowElementManager required for createCellsForColumn');
-                return createdCells;
+                return [];
             }
 
-            const rows = RowElementManager.getAllRows(true);
-            if (!rows.length) return createdCells;
-
-            // Add cells to each row
-            rows.forEach(row => {
-                for (let j = 0; j < columnCount; j++) {
-                    const cell = RowElementManager.createCellTemplate('');
-                    row.appendChild(cell);
-                    createdCells.push(cell);
-                }
-            });
-
-            return createdCells;
+            return RowElementManager.createCellsForColumns(columnCount);
         }
 
+        removeCellsAtColumnIndex(columnIndex) {
+            if (!RowElementManager.getInstance()) {
+                console.error('RowElementManager required for removeCellsAtColumnIndex');
+                return;
+            }
 
-        //Delete a column by its index and title
+            RowElementManager.removeCellsAtColumnIndex(columnIndex);
+        }
+
+        // COLUMN DELETION METHOD
+
         deleteColumn(index, columnTitle) {
             if (this.columnCount <= 0) return;
 
@@ -207,45 +143,20 @@ const ColumnManagerModule = (function () {
             // Remove the column
             const removedColumn = columns[index];
 
-            // Reset the sort indicator if a column that had it active was deleted
-            if (activeSort.column === removedColumn) {
-                activeSort = { column: null, direction: null };
-            }
-
-            removedColumn.remove();
+            // Get the sort indicators container
+            ColumnElementManager.removeColumn(removedColumn);
             this.removeCellsAtColumnIndex(index);
 
             // Update the column count
             this.columnCount--;
             ColumnElementManager.setColumnCount(this.columnCount);
+            ColumnElementManager.removeColumnByTitle(columnTitle);
 
-            // Dispatch the event
-            this._dispatchColumnEvent('columnRemoved', {
-                index,
-                column: removedColumn,
-                title: columnTitle
-            });
+            this._dispatchColumnEvent('columnDeleted', {});
         }
 
-        // Removes the row-cells for the deleted column
-        removeCellsAtColumnIndex(columnIndex) {
-            if (!RowElementManager.getInstance()) {
-                console.error('RowElementManager required for removeCellsAtColumnIndex');
-                return;
-            }
+        // GETTER METHODS
 
-            const rows = RowElementManager.getAllRows(true);
-
-            // Remove the cell at the index from each row
-            rows.forEach(row => {
-                const cells = RowElementManager.getCellsForRow(row);
-                if (cells?.length > columnIndex) {
-                    cells[columnIndex].remove();
-                }
-            });
-        }
-
-        // Getters
         getColumnHeaders() {
             return ColumnElementManager.getColumnHeaders(false);
         }
@@ -262,11 +173,8 @@ const ColumnManagerModule = (function () {
             return ColumnElementManager.getAllColumns(true);
         }
 
-        getActiveSort() {
-            return { ...activeSort };
-        }
+        // EVENT HANDLING
 
-        // Event handling
         _dispatchColumnEvent(eventName, detail) {
             this.columnInsertionPoint.dispatchEvent(new CustomEvent(`columnManager:${eventName}`, {
                 bubbles: true,
@@ -289,17 +197,16 @@ const ColumnManagerModule = (function () {
 
         getInstance: () => instance,
 
-        // Initialize an instance of all methods
+        // Column manipulation methods
         createColumn: title => instance?.createColumn(title) ?? null,
         addColumns: (count, headers) => instance?.addColumns(count, headers) ?? [],
         addColumn: title => instance?.addColumn(title) ?? null,
         deleteColumn: (index, title) => instance?.deleteColumn(index, title),
 
+        // Getter methods
         getColumnHeaders: () => instance?.getColumnHeaders() ?? [],
-        getColumnTitles: () => instance?.getColumnTitles() ?? [],
         getColumnCount: () => instance?.getColumnCount() ?? 0,
         getColumnByIndex: index => instance?.getColumnByIndex(index) ?? null,
         getAllColumns: () => instance?.getAllColumns() ?? [],
-        getActiveSort: () => instance?.getActiveSort() ?? { column: null, direction: null }
     };
 })();

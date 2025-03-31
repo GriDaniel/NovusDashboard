@@ -1,8 +1,9 @@
 ﻿/**
- * @module RowManagerModule
+ * @title RowManagerModule
+ * @description  Manages the creation and deletion of table rows
  * @author Daniel Oliveira
- * @description Manages the creation and deletion of table rows 
  */
+
 const RowManagerModule = (function () {
     let instance = null;
 
@@ -28,91 +29,43 @@ const RowManagerModule = (function () {
             PerformanceTracker.end('rowManagerInit');
         }
 
+        // ROW CREATION METHODS
+
         /**
          * Creates a single row element
          */
         createRow() {
             PerformanceTracker.start('createRow');
-            const columnCount = ColumnElementManager.getColumnCount();
+            const columnCount = ColumnManagerModule.getColumnCount();
             const row = RowElementManager.createRowTemplate(columnCount);
             PerformanceTracker.end('createRow');
             return row;
         }
 
         /**
-         * Sets the table to have a specific number of rows
-         */
-        setRowCount(targetCount) {
-            PerformanceTracker.start('setRowCount');
-
-            targetCount = parseInt(targetCount, 10) || 0;
-            if (isNaN(targetCount) || targetCount < 0 || targetCount === this.rowCount) {
-                PerformanceTracker.end('setRowCount');
-                return;
-            }
-
-            // Add or remove rows to reach target
-            targetCount > this.rowCount
-                ? this.addRows(targetCount - this.rowCount)
-                : this.removeRows(this.rowCount - targetCount);
-
-            PerformanceTracker.end('setRowCount');
-        }
-
-        /**
-         * Sets row count with data application
-         */
-        async setRowCountWithData(targetCount, currentPage, columns) {
-            PerformanceTracker.start('setRowCountWithData');
-
-            targetCount = parseInt(targetCount, 10) || 0;
-            if (isNaN(targetCount) || targetCount < 0 || targetCount === this.rowCount) {
-                PerformanceTracker.end('setRowCountWithData');
-                return [];
-            }
-
-            // Update current page if module exists
-            if (typeof DataApplierModule !== 'undefined' && DataApplierModule.setCurrentPage) {
-                DataApplierModule.setCurrentPage(currentPage);
-            }
-
-            // Update row count
-            this.setRowCount(targetCount);
-            PerformanceTracker.end('setRowCountWithData');
-
-            // Return newly added rows for compatibility
-            return targetCount > this.rowCount
-                ? RowElementManager.getLastNRows(targetCount - this.rowCount)
-                : [];
-        }
-
-        /**
          * Adds specified number of rows
          */
-        addRows(count) {
+        addRows(count, forceFlag = false) {
+            
             PerformanceTracker.start('addRows');
 
-            count = parseInt(count, 10) || 0;
+            count = this._validateCount(count);
             if (count <= 0) {
                 PerformanceTracker.end('addRows');
                 return [];
             }
 
-            const fragment = document.createDocumentFragment();
             const addedRows = [];
-
-            // Create all rows at once using fragment
             for (let i = 0; i < count; i++) {
-                const row = this.createRow();
-                fragment.appendChild(row);
-                addedRows.push(row);
+                addedRows.push(this.createRow());
             }
 
-            this.rowInsertionPoint.appendChild(fragment);
+            // Use ElementManager for DOM manipulation
+            RowElementManager.appendRows(addedRows, this.rowInsertionPoint);
             this.rowCount += count;
 
             // Notify about the change
-            this._dispatchRowEvent('rowsAdded', { count, rows: addedRows });
+            this._handleRowAddedNotification(addedRows, count);
 
             PerformanceTracker.end('addRows');
             return addedRows;
@@ -124,28 +77,66 @@ const RowManagerModule = (function () {
         removeRows(count) {
             PerformanceTracker.start('removeRows');
 
-            count = parseInt(count, 10) || 0;
+            count = this._validateCount(count);
             if (count <= 0) {
                 PerformanceTracker.end('removeRows');
                 return;
             }
 
             const rowsToRemove = Math.min(count, this.rowCount);
-            const removedRows = [];
 
-            // Remove rows from the end
-            for (let i = 0; i < rowsToRemove; i++) {
-                const row = this.rowInsertionPoint.lastChild;
-                removedRows.push(row);
-                this.rowInsertionPoint.removeChild(row);
-            }
-
+            // Use ElementManager for DOM manipulation
+            const removedRows = RowElementManager.removeLastNRows(rowsToRemove, this.rowInsertionPoint);
             this.rowCount -= rowsToRemove;
 
             // Notify about the change
-            this._dispatchRowEvent('rowsRemoved', { count: rowsToRemove, rows: removedRows });
+           
 
             PerformanceTracker.end('removeRows');
+        }
+
+        // ROW COUNT MANAGEMENT
+
+        /**
+         * Sets the table to have a specific number of rows
+         */
+        setRowCount(targetCount, forceFlag) {
+            PerformanceTracker.start('setRowCount');
+
+            targetCount = this._validateCount(targetCount);
+            if (targetCount === this.rowCount) {
+                PerformanceTracker.end('setRowCount');
+                return;
+            }
+
+            // Add or remove rows to reach target
+            targetCount > this.rowCount
+                ? this.addRows(targetCount - this.rowCount, forceFlag)
+                : this.removeRows(this.rowCount - targetCount);
+
+            PerformanceTracker.end('setRowCount');
+        }
+
+        /**
+         * Sets row count with data application
+         */
+        async setRowCountWithData(targetCount, forceFlag) {
+            PerformanceTracker.start('setRowCountWithData');
+
+            targetCount = this._validateCount(targetCount);
+            if (targetCount === this.rowCount) {
+                PerformanceTracker.end('setRowCountWithData');
+                return [];
+            }
+
+            // Update row count
+            this.setRowCount(targetCount, forceFlag);
+            PerformanceTracker.end('setRowCountWithData');
+
+            // Return newly added rows for compatibility
+            return targetCount > this.rowCount
+                ? RowElementManager.getLastNRows(targetCount - this.rowCount)
+                : [];
         }
 
         /**
@@ -158,6 +149,44 @@ const RowManagerModule = (function () {
             }
             PerformanceTracker.end('deleteAllRows');
         }
+
+        // ROW CONTENT MANAGEMENT
+
+        /**
+         * Clears row data without removing row DOM elements
+         */
+        clearRowData() {
+            PerformanceTracker.start('clearRowData');
+
+            const rows = this.getAllRows();
+
+            // Use ElementManager for DOM manipulation
+            RowElementManager.clearRowsContent(rows);
+
+            PerformanceTracker.end('clearRowData');
+            return rows;
+        }
+
+        // ROW STATE MANAGEMENT
+
+        /**
+         * Closes all expanded detail panels
+         */
+        closeAllExpandedRows() {
+            PerformanceTracker.start('closeAllExpandedRows');
+
+            const rows = this.getAllRows();
+
+            rows.forEach(row => {
+                if (row.dataset.expanded === "true") {
+                    RowElementManager.collapseExpandedRow(row);
+                }
+            });
+
+            PerformanceTracker.end('closeAllExpandedRows');
+        }
+
+        // GETTER METHODS
 
         /**
          * Returns current row count
@@ -180,15 +209,36 @@ const RowManagerModule = (function () {
             return RowElementManager.getRowByIndex(index, true);
         }
 
+        // UTILITY METHODS
+
         /**
-         * Sends event about row changes
+         * Validate and normalize count input
          */
-        _dispatchRowEvent(eventName, detail) {
-            this.rowInsertionPoint.dispatchEvent(new CustomEvent(`rowManager:${eventName}`, {
-                bubbles: true,
-                detail
-            }));
+        _validateCount(count) {
+            count = parseInt(count, 10) || 0;
+            return Math.max(0, count);
         }
+
+        /**
+         * Handle row added notification with pagination checks
+         */
+        _handleRowAddedNotification(addedRows, count) {
+            const maxPageText = PaginationElementManager.getMaxPage().textContent;
+            const maxPage = parseInt(maxPageText.match(/\d+/)[0], 10);
+            const currentPage = parseInt(PaginationElementManager.getCurrentPage().textContent, 10);
+            const totalCount = TableDataModule.getStoredCount;
+            
+                const itemsRemaining = totalCount - ((maxPage - 1) * DropdownContainerModule.getSelectedRowCount());
+
+                if ((maxPage !== currentPage) || maxPage === 1) {
+                    TableDataModule.handleRowsAdded(addedRows, count);
+                     
+                    
+                }
+          
+        }
+
+       
     }
 
     // Public API
@@ -212,12 +262,24 @@ const RowManagerModule = (function () {
         },
 
         getInstance: () => instance,
+
+        // Row creation methods
         createRow: () => instance?.createRow() || null,
-        setRowCount: (count) => instance?.setRowCount(count),
-        setRowCountWithData: (count, page, cols) => instance?.setRowCountWithData(count, page, cols) || Promise.resolve([]),
         addRows: (count) => instance?.addRows(count) || [],
         removeRows: (count) => instance?.removeRows(count),
+
+        // Row count management
+        setRowCount: (count, forceFlag) => instance?.setRowCount(count, forceFlag),
+        setRowCountWithData: (count, forceFlag) => instance?.setRowCountWithData(count, forceFlag) || Promise.resolve([]),
         deleteAllRows: () => instance?.deleteAllRows(),
+
+        // Row content management
+        clearRowData: () => instance?.clearRowData(),
+
+        // Row state management
+        closeAllExpandedRows: () => instance?.closeAllExpandedRows(),
+
+        // Getter methods
         getRowCount: () => instance?.getRowCount() || 0,
         getAllRows: () => instance?.getAllRows() || [],
         getRowByIndex: (index) => instance?.getRowByIndex(index) || null

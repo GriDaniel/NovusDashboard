@@ -26,12 +26,13 @@ namespace NovusDashboard.Services
             return collection.Find(FilterDefinition<QueueEntry>.Empty).ToList();
         }
 
-        public List<BsonDocument> ExecuteAggregation(string collectionName, BsonDocument[] pipeline)
+        public IEnumerable<BsonDocument> ExecuteAggregation(string collectionName, BsonDocument[] pipeline, AggregateOptions options = null)
         {
             var collection = _database.GetCollection<BsonDocument>(collectionName);
-            return collection.Aggregate<BsonDocument>(pipeline).ToList();
+            return options != null
+                ? collection.Aggregate<BsonDocument>(pipeline, options).ToList()
+                : collection.Aggregate<BsonDocument>(pipeline).ToList();
         }
-
         public List<T> ExecuteAggregation<T>(string collectionName, BsonDocument[] pipeline)
         {
             var collection = _database.GetCollection<T>(collectionName);

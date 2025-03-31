@@ -1,463 +1,370 @@
 ﻿/**
- * @module DataApplierModule
+ * @title DataApplierModule
+ * @description Applies data to table rows and columns based on TableDataModule events
  * @author Daniel Oliveira
- * @description Provides methods for applying data to the rows and columns
- *              based off tracking current data batch (searched data and regular data)
- *              
  */
-const DataApplierModule = (function() {
+const DataApplierModule = (function () {
     let instance = null;
 
     class DataApplier {
         constructor() {
-            PerformanceTracker.start('dataApplierInit');
             this.currentPage = 1;
+            this.isPageChangeInProgress = false;
             this._initEventListeners();
-            PerformanceTracker.end('dataApplierInit');
         }
 
+        // EVENT SETUP
+
         /**
-         * Sets up event listeners
+         * Sets up event listeners for TableDataModule events
          */
         _initEventListeners() {
-            document.addEventListener('rowManager:rowsAdded', this._handleRowsAdded.bind(this));
-            document.addEventListener('pagination:pageChanged', this._handlePageChanged.bind(this));
-            document.addEventListener('columnManager:columnAdded', this._handleColumnAdded.bind(this));
-            document.addEventListener('search:performed', this._handleSearchPerformed.bind(this));
-            document.addEventListener('search:cleared', this._handleSearchCleared.bind(this));
+            // Data events from TableDataModule
+            document.addEventListener('tableData:rowDataFetched', this._handleRowDataFetched.bind(this));
+            document.addEventListener('tableData:pageDataFetched', this._handlePageDataFetched.bind(this));
+            document.addEventListener('tableData:columnDataFetched', this._handleColumnDataFetched.bind(this));
+            document.addEventListener('tableData:searchDataFetched', this._handleSearchDataFetched.bind(this));
+            document.addEventListener('tableData:searchCleared', this._handleSearchDataCleared.bind(this));
+            document.addEventListener('tableData:sortDataFetched', this._handleSortDataFetched.bind(this));
+            document.addEventListener('tableData:sortCleared', this._handleSortDataCleared.bind(this));
+            document.addEventListener('tableData:pageOutOfBounds', this._handlePageOutOfBounds.bind(this));
+            document.addEventListener('columnManager:columnSwapped', this._handleColumnSwapped.bind(this));
+
+            // Legacy event listener for backward compatibility
+            document.addEventListener('pagination:pageChanged', (event) => {
+                this.currentPage = event.detail.page || 1;
+            });
+        }
+
+        // EVENT HANDLERS
+
+        /**
+         * Applies data when new rows are added
+         */
+        _handleRowDataFetched(event) {
+            const { rows, data, columns, currentPage } = event.detail;
+            if (!rows?.length || !data) return;
+
+            // Update current page
+            this.currentPage = currentPage;
+
+            // Apply data to rows
+            this.applyDataToRows(rows, data, columns);
+
+            this._dispatchDataEvent('dataApplied', { rows, rowsData: data });
         }
 
         /**
-         * Handles row addition
+         * Applies data when changing pages
          */
-        _handleRowsAdded(event) {
-            console.log("_handlerowsadded")
-            PerformanceTracker.start('handleRowsAdded');
-            const { count, rows } = event.detail;
+        _handlePageDataFetched(event) {
+            const {
+                page, rowCount, totalCount, rows,
+                data, columns, needsRowUpdate
+            } = event.detail;
 
-            if (!rows?.length || !count) {
-                PerformanceTracker.end('handleRowsAdded');
-                return;
-            }
-
-            const columns = ColumnElementManager.getColumnHeaders();
-            if (!columns?.length) {
-                PerformanceTracker.end('handleRowsAdded');
-                return;
-            }
-
-            // Calculate previous row count and apply data
-            const currentRowCount = RowManagerModule.getRowCount();
-            const previousRowCount = currentRowCount - count;
-            this.applyDataForRowCountChange(rows, this.currentPage, previousRowCount, count, columns)
-                .catch(error => console.error('Error applying data to new rows:', error));
-
-            PerformanceTracker.end('handleRowsAdded');
-        }
-
-        /**
-         * Handles page changes
-         */
-        async _handlePageChanged(event) {
-            PerformanceTracker.start('handlePageChanged');
-            const { page, rows, columns, rowsPerPage } = event.detail;
-
-            if (!columns?.length) {
-                PerformanceTracker.end('handlePageChanged');
-                return;
-            }
-
-            // Update page tracking
+            // Update page state
             this.currentPage = page;
+            this.isPageChangeInProgress = true;
 
             try {
-                // Get data counts and settings
-                const totalCount = await TableDataModule.getTotalCount();
-                const currentRowsPerPage = DropdownContainerModule?.getSelectedRowCount?.() || 
-                                           rowsPerPage || 
-                                           RowManagerModule.getRowCount() || 10;
+                let rowsToUpdate;
 
-                // Calculate items for this page
-                const startIndex = (page - 1) * currentRowsPerPage;
-                const itemsOnThisPage = Math.min(currentRowsPerPage, totalCount - startIndex);
-
-                // Handle invalid page
-                if (startIndex >= totalCount) {
-                    const maxValidPage = Math.max(1, Math.ceil(totalCount / currentRowsPerPage));
-                    
-                    if (PaginationModule?.goToPage && page !== maxValidPage) {
-                        await PaginationModule.goToPage(maxValidPage);
-                        PerformanceTracker.end('handlePageChanged');
-                        return;
-                    }
+                if (needsRowUpdate) {
+                    // Row count changed - update row count
+                    DOMUtils.batchUpdate(() => {
+                        if (rowCount > 0) {
+                            RowManagerModule.setRowCount(rowCount);
+                            rowsToUpdate = RowManagerModule.getAllRows();
+                            this.applyDataToRows(rowsToUpdate, data, columns);
+                        }
+                    });
+                } else {
+                    // Same row count - just clear data
+                    rowsToUpdate = RowManagerModule.clearRowData();
+                    this.applyDataToRows(rowsToUpdate, data, columns);
                 }
 
-                // Clear rows and rebuild with correct count
-                RowManagerModule.deleteAllRows();
-                
-                if (itemsOnThisPage <= 0) {
-                    PerformanceTracker.end('handlePageChanged');
-                    return;
-                }
-
-                const newRows = RowManagerModule.addRows(itemsOnThisPage);
-                const pageData = await TableDataModule.getPageData(page, itemsOnThisPage, columns);
-                
-                // Apply data and notify
-                this.applyDataToRows(newRows, pageData, columns);
+                // Notify other modules
                 this._dispatchDataEvent('pageDataApplied', {
                     page,
-                    rowCount: itemsOnThisPage,
+                    rowCount,
                     totalCount,
-                    rows: newRows,
-                    data: pageData
+                    rows: rowsToUpdate,
+                    data
                 });
             } catch (error) {
-                console.error(`Error handling page change to page ${page}:`, error);
+                console.error(`Error applying page data for page ${page}:`, error);
+            } finally {
+                this.isPageChangeInProgress = false;
             }
-
-            PerformanceTracker.end('handlePageChanged');
         }
-        
+
         /**
-         * Handles new columns
+         * Applies data when a column is added
          */
-        async _handleColumnAdded(event) {
-            console.log("in handle column added")
-            PerformanceTracker.start('handleColumnAdded');
-            const { column, page, rowCount } = event.detail;
-            
-            if (!column) {
-                PerformanceTracker.end('handleColumnAdded');
-                return;
-            }
-            
-            const startIndex = (page - 1) * rowCount;
-            
-            try {
-                await this.applyDataForAddedColumn(column, startIndex, rowCount, page);
-            } catch (error) {
-                console.error(`Error handling added column ${column}:`, error);
-            }
-            
-            PerformanceTracker.end('handleColumnAdded');
-          
+        _handleColumnDataFetched(event) {
+            const { column, columnIndex, data, page } = event.detail;
+            if (!data) return;
+
+            // Update current page
+            this.currentPage = page;
+
+            // Get all rows
+            const rows = RowManagerModule.getAllRows();
+
+            // Apply column data
+            this.applyDataToColumn(rows, data, column, columnIndex);
         }
-        
-        /**
-         * Handles search requests
-         */
-        async _handleSearchPerformed(event) {
-            PerformanceTracker.start('handleSearchPerformed');
-            const { term, type } = event.detail;
 
-            if (!term || !type) {
-                PerformanceTracker.end('handleSearchPerformed');
-                return;
+        /**
+         * Handles data after search/sort/clear operations with common implementation
+         */
+        _handleFilterOperation(event, operationType) {
+            const {
+                page, rowCount, columns, data, needsRowUpdate,
+                totalCount, totalResults
+            } = event.detail;
+
+            const additionalData = {};
+
+            // Get operation-specific data
+            if (operationType === 'search') {
+                additionalData.term = event.detail.term;
+                additionalData.type = event.detail.type;
+                additionalData.totalResults = totalResults;
+            } else if (operationType === 'sort') {
+                additionalData.column = event.detail.column;
+                additionalData.direction = event.detail.direction;
+                additionalData.totalResults = totalCount;
+            } else {
+                additionalData.totalResults = totalCount;
             }
 
+            this.isPageChangeInProgress = true;
+
             try {
-                // Activate search mode
-                TableDataModule.activateSearch(term, type);
-                const columns = ColumnElementManager.getColumnHeaders();
-                const searchCount = await TableDataModule.getTotalCount();
-                
-                // Reset to page 1
-                this.currentPage = 1;
-                if (PaginationModule) {
-                    if (PaginationModule.getCurrentPage() !== 1) {
-                        await PaginationModule.goToPage(1);
-                    }
-                    await PaginationModule.updateMaxPages();
-                }
+                // Update current page
+                this.currentPage = page;
 
-                // Get display settings
-                const rowsPerPage = DropdownContainerModule?.getSelectedRowCount?.() ||
-                                   RowManagerModule.getRowCount() || 10;
-                
-                // Reset and rebuild rows
-                RowManagerModule.deleteAllRows();
-                const rowsToShow = Math.min(rowsPerPage, searchCount);
+                // Process rows based on the common pattern
+                const rowsToUpdate = this._updateRowsAndApplyData(rowCount, data, columns, needsRowUpdate);
 
-                if (rowsToShow > 0) {
-                    const addedRows = RowManagerModule.addRows(rowsToShow);
-                    const searchData = await TableDataModule.getPageData(1, rowsToShow, columns);
-                    this.applyDataToRows(addedRows, searchData, columns);
-                }
+                // Notification type based on operation
+                const eventMap = {
+                    'search': 'searchApplied',
+                    'searchClear': 'searchCleared',
+                    'sort': 'sortApplied',
+                    'sortClear': 'sortCleared'
+                };
 
-                // Notify about search results
-                this._dispatchDataEvent('searchApplied', {
-                    term, type, page: 1, rowCount: rowsToShow,
-                    totalResults: searchCount, columns
+                // Notify other modules
+                this._dispatchDataEvent(eventMap[operationType], {
+                    page,
+                    rowCount,
+                    totalResults: additionalData.totalResults,
+                    columns,
+                    ...additionalData
                 });
             } catch (error) {
-                console.error('Error handling search:', error);
+                console.error(`Error handling ${operationType} operation:`, error);
+            } finally {
+                this.isPageChangeInProgress = false;
             }
-
-            PerformanceTracker.end('handleSearchPerformed');
         }
 
         /**
-         * Handles search clearing
+         * Applies data after search
          */
-        async _handleSearchCleared() {
-            PerformanceTracker.start('handleSearchCleared');
+        _handleSearchDataFetched(event) {
+            this._handleFilterOperation(event, 'search');
+        }
 
-            try {
-                // Deactivate search and get counts
-                let totalCount;
-                try {
-                    totalCount = await TableDataModule.deactivateSearch();
-                } catch (error) {
-                    totalCount = await TableDataModule.getTotalCount();
-                }
+        /**
+         * Applies data after search is cleared
+         */
+        _handleSearchDataCleared(event) {
+            this._handleFilterOperation(event, 'searchClear');
+        }
 
-                const columns = ColumnElementManager.getColumnHeaders();
-                this.currentPage = 1;
+        /**
+         * Applies data after sort
+         */
+        _handleSortDataFetched(event) {
+            this._handleFilterOperation(event, 'sort');
+        }
 
-                // Update pagination
-                if (PaginationModule) {
-                    if (PaginationModule.getCurrentPage() !== 1) {
-                        await PaginationModule.goToPage(1);
+        /**
+         * Applies data after sort is cleared
+         */
+        _handleSortDataCleared(event) {
+            this._handleFilterOperation(event, 'sortClear');
+        }
+
+        /**
+         * Handles case when page is out of bounds
+         */
+        _handlePageOutOfBounds(event) {
+            const { currentPage, maxValidPage } = event.detail;
+
+            // Navigate to valid page
+            if (PaginationModule?.goToPage && currentPage !== maxValidPage) {
+                PaginationModule.goToPage(maxValidPage);
+            }
+        }
+
+        /**
+         * Handles column swap events
+         */
+        _handleColumnSwapped(event) {
+            const { index1, index2 } = event.detail;
+
+            // Get all rows
+            const rows = RowManagerModule.getAllRows();
+            if (!rows?.length) return;
+
+            // Batch DOM operations for better performance
+            DOMUtils.batchUpdate(() => {
+                rows.forEach(rowElement => {
+                    const cells = RowElementManager.getCellsForRow(rowElement);
+
+                    // Make sure we have both cells
+                    if (cells.length > Math.max(index1, index2)) {
+                        // Swap content between cells
+                        const tempContent = cells[index1].textContent;
+                        cells[index1].textContent = cells[index2].textContent;
+                        cells[index2].textContent = tempContent;
                     }
-
-                    const rowsPerPage = DropdownContainerModule?.getSelectedRowCount?.() ||
-                                       RowManagerModule.getRowCount() || 10;
-                    
-                    const newTotalPages = Math.max(1, Math.ceil(totalCount / rowsPerPage));
-                    
-                    // Update pagination elements
-                    const maxPageEl = PaginationElementManager.getMaxPage();
-                    if (maxPageEl) {
-                        maxPageEl.textContent = `${newTotalPages} page${newTotalPages !== 1 ? 's' : ''}`;
-                    }
-                    
-                    await PaginationModule.updateMaxPages();
-                }
-
-                // Reset rows with normal data
-                const rowsPerPage = DropdownContainerModule?.getSelectedRowCount?.() ||
-                                   RowManagerModule.getRowCount() || 10;
-                
-                RowManagerModule.deleteAllRows();
-                const rowsToShow = Math.min(rowsPerPage, totalCount);
-
-                if (rowsToShow > 0) {
-                    const addedRows = RowManagerModule.addRows(rowsToShow);
-                    const normalData = await TableDataModule.getPageData(1, rowsToShow, columns);
-                    this.applyDataToRows(addedRows, normalData, columns);
-                }
-
-                // Notify about reset
-                this._dispatchDataEvent('searchCleared', {
-                    page: 1,
-                    rowCount: rowsToShow,
-                    totalResults: totalCount,
-                    columns
                 });
-
-                // Update pagination state
-                document.dispatchEvent(new CustomEvent('pagination:stateUpdated', {
-                    bubbles: true,
-                    detail: {
-                        page: 1,
-                        rowsPerPage: rowsPerPage,
-                        totalPages: Math.max(1, Math.ceil(totalCount / rowsPerPage)),
-                        totalCount: totalCount
-                    }
-                }));
-            } catch (error) {
-                console.error('Error handling search cleared:', error);
-            }
-
-            PerformanceTracker.end('handleSearchCleared');
-        }
-
-        /**
-         * Fetches and applies data for page changes
-         */
-        async applyDataForPageChange(rows, page, rowsPerPage, columns) {
-            PerformanceTracker.start('applyDataForPageChange');
-            if (!rows?.length || !columns?.length) {
-                PerformanceTracker.end('applyDataForPageChange');
-                return;
-            }
-
-            try {
-                
-                const data = await TableDataModule.getPageData(page, rowsPerPage, columns)
-                    .then(response => {
-                        return response.json();
-                    });
-               
-                this.applyDataToRows(rows, data, columns);
-                
-                this._dispatchDataEvent('pageDataApplied', { page, rows, data });
-                PerformanceTracker.end('applyDataForPageChange');
-            } catch (error) {
-                console.error('Error fetching page data:', error);
-                PerformanceTracker.end('applyDataForPageChange');
-                throw error;
-            }
-        }
-        
-        /**
-         * Fetches and applies data for a new column
-         */
-        async applyDataForAddedColumn(column, startIndex, rowCount, page) {
-            PerformanceTracker.start('applyDataForAddedColumn');
-            try {
-                let data;
-                
-                if (TableDataModule.isSearchModeActive?.()) {
-                    // Search mode - use search API
-                    const adjustedStartIndex = (page - 1) * rowCount;
-                    try {
-                        const url = `/ProductionHistory/SearchRange?term=${encodeURIComponent(TableDataModule._currentSearchTerm || '')}&type=${encodeURIComponent(TableDataModule._currentSearchType || '')}&startIndex=${adjustedStartIndex}&count=${rowCount}&columns=${encodeURIComponent(column)}`;
-                        const response = await fetch(url);
-                        if (!response.ok) throw new Error(`HTTP error ${response.status}`);
-                        data = await response.json();
-                    } catch (error) {
-                        // Fallback to regular data
-                        data = await TableDataModule.getRangeJobData([column], startIndex, rowCount);
-                    }
-                } else {
-                    // Normal mode
-                    data = await TableDataModule.getRangeJobData([column], startIndex, rowCount);
-                }
-
-                if (!data?.length) {
-                    PerformanceTracker.end('applyDataForAddedColumn');
-                    return;
-                }
-
-                // Find column position and apply data
-                const rows = RowManagerModule.getAllRows();
-                const headers = ColumnElementManager.getColumnHeaders();
-                const columnIndex = headers.indexOf(column);
-
-                if (columnIndex === -1) {
-                    PerformanceTracker.end('applyDataForAddedColumn');
-                    return;
-                }
-
-                this.applyDataToColumn(rows, data, column, columnIndex);
-                PerformanceTracker.end('applyDataForAddedColumn');
-            } catch (error) {
-                console.error(`Error applying data for column ${column}:`, error);
-                PerformanceTracker.end('applyDataForAddedColumn');
-                throw error;
-            }
-        }
-        
-        /**
-         * Applies data to specific column cells
-         */
-        applyDataToColumn(rows, data, columnName, columnIndex) {
-            PerformanceTracker.start('applyDataToColumn');
-            
-            if (!rows?.length || !data?.length) {
-                PerformanceTracker.end('applyDataToColumn');
-                return;
-            }
-            
-            rows.forEach((rowElement, rowIndex) => {
-                if (rowIndex >= data.length) return;
-                
-                const rowData = data[rowIndex];
-                if (!rowData) return;
-                
-                const cells = RowElementManager.getCellsForRow(rowElement);
-                if (columnIndex >= cells.length) return;
-                
-                // Extract and set value
-                const value = this.extractValueFromData(rowData, columnName);
-                cells[columnIndex].textContent = value !== null && value !== undefined
-                    ? this.formatCellValue(value) : '';
             });
-            
-            this._dispatchDataEvent('columnDataApplied', { 
-                column: columnName, columnIndex, rows, data 
-            });
-            
-            PerformanceTracker.end('applyDataToColumn');
+
+            // Notify other modules about the swap
+            this._dispatchDataEvent('columnSwapped', event.detail);
         }
+
+        // ROW MANAGEMENT METHODS
 
         /**
-         * Fetches and applies data for row count changes
+         * Helper method to update rows and apply data with common pattern
          */
-        async applyDataForRowCountChange(rows, currentPage, previousRowCount, addedRowCount, columns) {
-            PerformanceTracker.start('applyDataForRowCountChange');
-           
-            if (!rows?.length || !columns?.length) {
-                PerformanceTracker.end('applyDataForRowCountChange');
-                return;
+        _updateRowsAndApplyData(rowCount, data, columns, needsRowUpdate = true) {
+            let rowsToUpdate;
+
+            if (needsRowUpdate) {
+                // Row count changed
+                DOMUtils.batchUpdate(() => {
+                    RowManagerModule.deleteAllRows();
+                    if (rowCount > 0) {
+                        rowsToUpdate = RowManagerModule.addRows(rowCount);
+                    }
+                });
+            } else {
+                // Just clear existing rows
+                rowsToUpdate = RowManagerModule.clearRowData();
             }
 
-            try {
-                
-                const data = await TableDataModule.handleRowCountChange(
-                    currentPage, previousRowCount, addedRowCount, columns
-                );
-                
-
-                this.applyDataToRows(rows, data, columns);
-                PerformanceTracker.end('applyDataForRowCountChange');
-            } catch (error) {
-                console.error('Error fetching data for rows:', error);
-                PerformanceTracker.end('applyDataForRowCountChange');
-                throw error;
+            // Apply data if we have rows
+            if (rowsToUpdate?.length && rowCount > 0 && data) {
+                this.applyDataToRows(rowsToUpdate, data, columns);
             }
+
+            return rowsToUpdate;
         }
+
+        // DATA APPLICATION METHODS
 
         /**
          * Applies data to table rows
          */
         applyDataToRows(rows, data, columns) {
-            PerformanceTracker.start('applyDataToRows');
-            console.log("incoming data is", data);
             // Normalize data format
+           
             const rowsData = Array.isArray(data) ? data : (data.rows || []);
+            if (!rowsData?.length) return;
 
-            if (!rowsData?.length) {
-                PerformanceTracker.end('applyDataToRows');
-                return;
-            }
+            // Batch DOM operations
+            DOMUtils.batchUpdate(() => {
+                rows.forEach((rowElement, rowIndex) => {
+                    if (rowIndex >= rowsData.length) return;
 
-            rows.forEach((rowElement, rowIndex) => {
-                if (rowIndex >= rowsData.length) return;
+                    const rowData = rowsData[rowIndex];
+                    if (!rowData) return;
 
-                const rowData = rowsData[rowIndex];
-                if (!rowData) return;
+                    this._applyRowData(rowElement, rowData, columns);
+                });
 
-                const cells = RowElementManager.getCellsForRow(rowElement);
+                // Close any open detail panels
+                RowManagerModule.closeAllExpandedRows();
+            });
+        }
 
-                // Fill each cell with data
-                columns.forEach((columnName, colIndex) => {
-                    if (colIndex >= cells.length) return;
-                    
+        /**
+         * Applies data to a single row
+         */
+        _applyRowData(rowElement, rowData, columns) {
+          
+            const cells = RowElementManager.getCellsForRow(rowElement);
+
+            // Fill each cell with data
+            columns.forEach((columnName, colIndex) => {
+                if (colIndex >= cells.length) return;
+
+                const value = this.extractValueFromData(rowData, columnName);
+                const formattedValue = value !== null && value !== undefined
+                    ? this.formatCellValue(value) : '';
+
+                // Update only if content changed
+                if (cells[colIndex].textContent !== formattedValue) {
+                    cells[colIndex].textContent = formattedValue;
+                }
+            });
+        }
+
+        /**
+         * Applies data to a specific column
+         */
+        applyDataToColumn(rows, data, columnName, columnIndex) {
+            if (!rows?.length || !data?.length) return;
+
+            // Batch DOM operations
+            DOMUtils.batchUpdate(() => {
+                rows.forEach((rowElement, rowIndex) => {
+                    if (rowIndex >= data.length) return;
+
+                    const rowData = data[rowIndex];
+                    if (!rowData) return;
+
+                    const cells = RowElementManager.getCellsForRow(rowElement);
+                    if (columnIndex >= cells.length) return;
+
+                    // Extract and format value
                     const value = this.extractValueFromData(rowData, columnName);
-                    cells[colIndex].textContent = value !== null && value !== undefined
+                    const formattedValue = value !== null && value !== undefined
                         ? this.formatCellValue(value) : '';
+
+                    // Update only if content changed
+                    if (cells[columnIndex].textContent !== formattedValue) {
+                        cells[columnIndex].textContent = formattedValue;
+                    }
                 });
             });
 
-            this._dispatchDataEvent('dataApplied', { rows, rowsData });
-            PerformanceTracker.end('applyDataToRows');
+            // Notify other modules
+            this._dispatchDataEvent('columnDataApplied', {
+                column: columnName, columnIndex, rows, data
+            });
         }
+
+        // DATA HELPERS
 
         /**
          * Extracts value from data object
          */
         extractValueFromData(rowData, columnName) {
-            // First check for direct property match (works for all columns including Profile Name)
+            // Check direct property match
             if (rowData.hasOwnProperty(columnName)) {
-                console.log(`Direct match found for ${columnName}: ${rowData[columnName]}`);
                 return rowData[columnName];
             }
-
-            // Add debug logging when no match is found
-            console.log(`No match found for column ${columnName} in data:`, rowData);
             return null;
         }
 
@@ -467,15 +374,19 @@ const DataApplierModule = (function() {
         formatCellValue(value) {
             if (value === null || value === undefined) {
                 return '';
-            } else if (typeof value === 'object') {
-                return JSON.stringify(value);
-            } else {
-                return String(value);
             }
+
+            if (typeof value === 'object') {
+                return JSON.stringify(value);
+            }
+
+            return String(value);
         }
 
+        // EVENT DISPATCHING
+
         /**
-         * Sends event with data operation details
+         * Dispatches event with data operation details
          */
         _dispatchDataEvent(eventName, detail) {
             document.dispatchEvent(new CustomEvent(`dataApplier:${eventName}`, {
@@ -484,38 +395,46 @@ const DataApplierModule = (function() {
             }));
         }
 
+        // PUBLIC METHODS
+
         /**
-         * Updates current page
+         * Updates current page and syncs with TableDataModule
          */
         setCurrentPage(page) {
             this.currentPage = page || 1;
+
+            // Forward to TableDataModule
+            if (TableDataModule.setCurrentPage) {
+                TableDataModule.setCurrentPage(this.currentPage);
+            }
         }
     }
 
     // Public API
     return {
+        /**
+         * Initializes the module
+         */
         initialize() {
-            PerformanceTracker.start('dataApplierInitialize');
-            try {
-                if (!instance) {
-                    instance = new DataApplier();
-                }
-            } catch (error) {
-                console.error('Error initializing DataApplier:', error);
-                PerformanceTracker.end('dataApplierInitialize');
-                throw error;
+            if (!instance) {
+                instance = new DataApplier();
             }
-            PerformanceTracker.end('dataApplierInitialize');
             return instance;
         },
 
+        /**
+         * Gets the singleton instance
+         */
         getInstance: () => instance,
+
+        /**
+         * Sets current page
+         */
         setCurrentPage: (page) => instance?.setCurrentPage(page),
-        applyDataForPageChange: (rows, page, rowsPerPage, columns) => 
-            instance?.applyDataForPageChange(rows, page, rowsPerPage, columns) || Promise.resolve(),
-        applyDataForAddedColumn: (column, startIndex, rowCount, page) => 
-            instance?.applyDataForAddedColumn(column, startIndex, rowCount, page) || Promise.resolve(),
-        applyDataToRows: (rows, data, columns) => 
-            instance?.applyDataToRows(rows, data, columns)
+
+        /**
+         * Applies data to rows (for backward compatibility)
+         */
+        applyDataToRows: (rows, data, columns) => instance?.applyDataToRows(rows, data, columns)
     };
 })();
