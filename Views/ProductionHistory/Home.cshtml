@@ -197,7 +197,35 @@
         <div class="data-table__pagination">
             <div class="pagination-container">
                 <div class="pagination-info">
-                    <span class="current">1</span> of <span class="next">5</span>
+                    <div class="dropdown-container advance-dropdown">
+                        <button class="data-table__control-btn">
+                           <div class="d-flex gap-3 page-advance-container align-items-center justify-content-center ">
+                               <span class="dropdown-arrow"></span>
+                               <span class="current"></span>
+                              
+                            </div>
+                            of <span class="next">5</span>
+                        </button>
+                        <div class="dropdown-content-container">
+                            <button class="dropdown-item static-input close-static-input">
+                                Close
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                            <div class="custom-input-container">
+                                <input type="number" class="custom-input" placeholder="Go to page" min="5" max="35" required onkeydown="return event.keyCode !== 69" inputmode="numeric" autocomplete="off">
+
+                                <button type="button" class="clear-button d-none" id="clearSearchButton" aria-label="Clear search">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div> 
                 </div>
                 <div class="pagination-controls">
                     <div class="d-flex flex-row h-100">
@@ -237,6 +265,7 @@
         </div>
     </div>
 </div>
+
 
 @section Scripts {
     

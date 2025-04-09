@@ -14,7 +14,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             updateRowCount: '/TablePreferences/UpdateRowCount'
         },
         useServerPreferences: true, // Developer can set to false to use defaults
-        initialPage: 1
+        initialPage: 1,
+        
     };
 
     // Utility function for error logging

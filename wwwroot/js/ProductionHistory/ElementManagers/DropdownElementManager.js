@@ -21,6 +21,7 @@ const DropdownElementManager = (function () {
             dropdownItem: 'dropdown-item',
             dropdownContainer: 'dropdown-container',
             customInput: 'custom-input',
+            clearButton: 'clear-button',
             setButton: 'set-button',
             valueContainer: 'd-flex',
             valueText: 'span:first-child',
@@ -40,7 +41,8 @@ const DropdownElementManager = (function () {
             'search-dropdown': 'search',
             'sort-dropdown': 'sort',
             'column-title-dropdown': 'column-title',
-            'row-info-dropdown': 'row-info'
+            'row-info-dropdown': 'row-info',
+            'advance-dropdown': 'advance'
         };
 
         // ELEMENT ACCESS METHODS
@@ -61,6 +63,7 @@ const DropdownElementManager = (function () {
         manager.getCloseIcon = container => getElement(container, 'closeIcon', 'getCloseIcon()');
         manager.getArrow = container => getElement(container, 'arrow', 'getArrow()');
         manager.getCloseButton = container => getElement(container, 'closeButton', 'getCloseButton()');
+        manager.getClearButton = container => getElement(container, 'clearButton', 'getClearButton()');
         manager.getTitleElement = container => getElement(container, 'titleElement', 'getTitleElement()');
 
         manager.getValueContainer = container => {
@@ -167,6 +170,8 @@ const DropdownElementManager = (function () {
         getSortIndicators: container => instance?.getSortIndicators(container) ?? [],
         getCloseButton: container => instance?.getCloseButton(container) ?? null,
         getTitleElement: container => instance?.getTitleElement(container) ?? null,
+        getClearButton: container => instance?.getClearButton(container) ?? null,
+
 
         // DOM Manipulation Methods
         createCloseButton: (key) => instance?.createCloseButton(key) ?? null,

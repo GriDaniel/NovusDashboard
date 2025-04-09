@@ -60,6 +60,14 @@ const DropdownContainerModule = (function () {
                         button: DropdownElementManager.getDropdownButtonColumn
                     },
                     setup: this.setupColumnTitleDropdown.bind(this)
+                },
+                'advance': {
+                    elements: {
+                        button: DropdownElementManager.getDropdownButton,
+                        customInput: DropdownElementManager.getCustomInput,
+                        clearButton: DropdownElementManager.getClearButton
+                    },
+                    setup: this.setupAdvanceDropdown.bind(this)
                 }
             };
         }
@@ -188,6 +196,17 @@ const DropdownContainerModule = (function () {
 
         closeDropdown(dropdown) {
             if (!dropdown.isOpen) return;
+
+            if (dropdown.type === "advance") {
+                console.log("called!")
+                const input = dropdown.elements.customInput;
+                const inputValue = input.value
+                if (inputValue !== '') {
+                    input.value = '';
+                    
+                }
+               
+            }
 
             const { content, arrow } = dropdown.elements;
             const showClass = DropdownElementManager.getClassName('showClass');
@@ -603,6 +622,95 @@ const DropdownContainerModule = (function () {
             searchText.textContent = '';
             DropdownContainerModule.setSelectedRowCount(this._lastSelectedRow);
         }
+
+        setupAdvanceDropdown(dropdown) {
+            this.setupCloseListener(dropdown);
+            const input = dropdown.elements.customInput;
+            const clearButton = dropdown.elements.clearButton;
+
+            console.log("our custom input", input);
+            console.log("our clear button", clearButton);
+
+            // Initially hide the clear button (if it doesn't already have d-none class)
+            if (clearButton) {
+                clearButton.classList.add('d-none');
+            }
+
+            // Debounce helper
+            const debounce = (func, delay) => {
+                let timeout;
+                return function (...args) {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(this, args), delay);
+                };
+            };
+
+            const handleInput = debounce(() => {
+                const value = input.value.trim();
+
+                // Toggle clear button visibility based on input value
+                if (clearButton) {
+                    if (value !== '') {
+                        clearButton.classList.remove('d-none');
+                    } else {
+                        clearButton.classList.add('d-none');
+                    }
+                }
+
+                const maxValue = PaginationElementManager.getMaxPage();
+                const text = maxValue.textContent;
+                const maxPageNumber = parseInt(text);
+                const currentPage = PaginationElementManager.getCurrentPage().textContent;
+                if (/^\d+$/.test(value)) {
+                    if (value >= maxPageNumber) {
+                        input.value = maxPageNumber;
+                        console.log("current page is", currentPage)
+                        console.log("current max is", maxPageNumber)
+                        if (currentPage != maxPageNumber) {
+                            console.log("going!");
+                            PaginationModule.goToPage(maxPageNumber);
+                        }
+                    }
+                    else if (value < 1) {
+                        input.value = 1;
+                        if (currentPage != 1) { PaginationModule.goToPage(1); }
+                    }
+                    else if (value != currentPage) {
+                        PaginationModule.goToPage(value);
+                    }
+                }
+            }, 500); // 500ms delay
+
+            // Add input event handler to update clear button visibility immediately
+            input.addEventListener("input", function (e) {
+                // Show/hide clear button immediately on input
+                if (clearButton) {
+                    if (e.target.value.trim() !== '') {
+                        clearButton.classList.remove('d-none');
+                    } else {
+                        clearButton.classList.add('d-none');
+                    }
+                }
+
+                // Call the debounced function for navigation logic
+                handleInput();
+            });
+
+            // Add click handler for clear button
+            if (clearButton) {
+                clearButton.addEventListener("click", function (e) {
+                    // Clear the input
+                    input.value = '';
+
+                    // Hide the clear button
+                    clearButton.classList.add('d-none');
+
+                    // Prevent the click from closing the dropdown
+                    e.stopPropagation();
+                });
+            }
+        }
+
 
         // DROPDOWN TYPE-SPECIFIC SETUP METHODS
 
