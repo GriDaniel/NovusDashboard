@@ -64,10 +64,10 @@ gulp.task('production-css', () => {
     console.log('Individual CSS files detected:', files);
     console.log('CSS folders detected:', folders);
 
-    // Minify individual files at root level
+    // Minify individual files at root level with explicit base
     const minifyFiles = files.length > 0 ? files.map(file => {
         console.log(`Processing individual CSS file: ${file}`);
-        return gulp.src(path.join(cssDir, file))
+        return gulp.src(path.join(cssDir, file), { base: cssDir })
             .pipe(cleanCSS())
             .pipe(rename({ suffix: '.min' }))
             .pipe(gulp.dest('wwwroot/css'))
@@ -96,10 +96,10 @@ gulp.task('production-js', () => {
     console.log('Individual JS files detected:', files);
     console.log('JS folders detected:', folders);
 
-    // Minify individual files at root level
+    // Minify individual files at root level with explicit base
     const minifyFiles = files.length > 0 ? files.map(file => {
         console.log(`Processing individual JS file: ${file}`);
-        return gulp.src(path.join(jsDir, file))
+        return gulp.src(path.join(jsDir, file), { base: jsDir })
             .pipe(terser())
             .pipe(rename({ suffix: '.min' }))
             .pipe(gulp.dest('wwwroot/js'))
