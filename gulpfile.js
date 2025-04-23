@@ -2,105 +2,110 @@ const gulp = require('gulp');
 const concat = require('gulp-concat');
 const cssmin = require('gulp-cssmin');
 const uglify = require('gulp-uglify');
+const cleanCSS = require('gulp-clean-css');
+const rename = require('gulp-rename');
 const del = require('del');
 const merge = require('merge-stream');
 const fs = require('fs');
 const path = require('path');
 
-// Helper function to get parent folders
-function getParentFolders(srcPath) {
+// Helper function to get folders in a directory
+function getFolders(dir) {
     try {
-        return fs.readdirSync(srcPath)
-            .filter(f => fs.statSync(path.join(srcPath, f)).isDirectory());
+        return fs.readdirSync(dir)
+            .filter(f => fs.statSync(path.join(dir, f)).isDirectory());
     } catch (error) {
-        console.error(`Error reading ${srcPath}: ${error.message}`);
+        console.error(`Error reading ${dir}: ${error.message}`);
         return [];
     }
 }
 
-// Development CSS: Concatenate without minification
+// Helper function to get files in a directory (non-recursive)
+function getFiles(dir) {
+    try {
+        return fs.readdirSync(dir)
+            .filter(f => fs.statSync(path.join(dir, f)).isFile());
+    } catch (error) {
+        console.error(`Error reading ${dir}: ${error.message}`);
+        return [];
+    }
+}
+
+// Development: Mirror src to wwwroot for css and js
 gulp.task('development-css', () => {
-    const parentFolders = getParentFolders('src/css');
-    if (!parentFolders.length) {
-        console.log('No CSS parent folders found in src/css');
-        return Promise.resolve();
-    }
-    const streams = parentFolders.map(folder => {
-        return gulp.src(`src/css/${folder}/**/*.css`, { allowEmpty: true })
-            .pipe(concat(`${folder}.css`))
-            .pipe(gulp.dest('wwwroot/css'))
-            .on('error', err => console.error(`Error processing CSS for ${folder}: ${err.message}`));
-    });
-    return merge(streams);
+    return gulp.src('src/css/**/*', { base: 'src/css' })
+        .pipe(gulp.dest('wwwroot/css'));
 });
 
-// Development JS: Concatenate without minification
 gulp.task('development-js', () => {
-    const parentFolders = getParentFolders('src/js');
-    if (!parentFolders.length) {
-        console.log('No JS parent folders found in src/js');
-        return Promise.resolve();
-    }
-    const streams = parentFolders.map(folder => {
-        return gulp.src(`src/js/${folder}/**/*.js`, { allowEmpty: true })
-            .pipe(concat(`${folder}.js`))
-            .pipe(gulp.dest('wwwroot/js'))
-            .on('error', err => console.error(`Error processing JS for ${folder}: ${err.message}`));
-    });
-    return merge(streams);
+    return gulp.src('src/js/**/*', { base: 'src/js' })
+        .pipe(gulp.dest('wwwroot/js'));
 });
 
-// Combined development task
 gulp.task('development', gulp.parallel('development-css', 'development-js'));
 
-// Production CSS: Concatenate and minify
+// Production: Minify individual files and concatenate folders for css
 gulp.task('production-css', () => {
-    const parentFolders = getParentFolders('src/css');
-    if (!parentFolders.length) {
-        console.log('No CSS parent folders found in src/css');
-        return Promise.resolve();
-    }
-    const streams = parentFolders.map(folder => {
-        return gulp.src(`src/css/${folder}/**/*.css`, { allowEmpty: true })
-            .pipe(concat(`${folder}.min.css`))
-            .pipe(cssmin())
-            .pipe(gulp.dest('wwwroot/css'))
-            .on('error', err => console.error(`Error minifying CSS for ${folder}: ${err.message}`));
+    const cssDir = 'src/css';
+    const files = getFiles(cssDir).filter(f => f.endsWith('.css'));
+    const folders = getFolders(cssDir);
+
+    // Minify individual files
+    const minifyFiles = files.map(file => {
+        return gulp.src(path.join(cssDir, file))
+            .pipe(cleanCSS())
+            .pipe(rename({ suffix: '.min' }))
+            .pipe(gulp.dest('wwwroot/css'));
     });
-    return merge(streams);
+
+    // Concatenate and minify folders
+    const minifyFolders = folders.map(folder => {
+        return gulp.src(path.join(cssDir, folder, '**/*.css'))
+            .pipe(concat(`${folder}.min.css`))
+            .pipe(cleanCSS())
+            .pipe(gulp.dest('wwwroot/css'));
+    });
+
+    return merge([...minifyFiles, ...minifyFolders]);
 });
 
-// Production JS: Concatenate and minify
+// Production: Minify individual files and concatenate folders for js
 gulp.task('production-js', () => {
-    const parentFolders = getParentFolders('src/js');
-    if (!parentFolders.length) {
-        console.log('No JS parent folders found in src/js');
-        return Promise.resolve();
-    }
-    const streams = parentFolders.map(folder => {
-        return gulp.src(`src/js/${folder}/**/*.js`, { allowEmpty: true })
+    const jsDir = 'src/js';
+    const files = getFiles(jsDir).filter(f => f.endsWith('.js'));
+    const folders = getFolders(jsDir);
+
+    // Minify individual files
+    const minifyFiles = files.map(file => {
+        return gulp.src(path.join(jsDir, file))
+            .pipe(uglify())
+            .pipe(rename({ suffix: '.min' }))
+            .pipe(gulp.dest('wwwroot/js'));
+    });
+
+    // Concatenate and minify folders
+    const minifyFolders = folders.map(folder => {
+        return gulp.src(path.join(jsDir, folder, '**/*.js'))
             .pipe(concat(`${folder}.min.js`))
             .pipe(uglify())
-            .pipe(gulp.dest('wwwroot/js'))
-            .on('error', err => console.error(`Error minifying JS for ${folder}: ${err.message}`));
+            .pipe(gulp.dest('wwwroot/js'));
     });
-    return merge(streams);
+
+    return merge([...minifyFiles, ...minifyFolders]);
 });
 
-// Clean non-minified files in production
-gulp.task('clean-non-minified', () => {
+// Clean wwwroot for production (remove non-minified files and folders)
+gulp.task('clean-production', () => {
     return del([
-        'wwwroot/css/**/*.css', '!wwwroot/css/**/*.min.css',
-        'wwwroot/js/**/*.js', '!wwwroot/js/**/*.min.js'
-    ], { force: true })
-        .then(() => console.log('Non-minified files deleted'))
-        .catch(err => console.error(`Error cleaning non-minified files: ${err.message}`));
+        'wwwroot/css/**/*', '!wwwroot/css/*.min.css',
+        'wwwroot/js/**/*', '!wwwroot/js/*.min.js'
+    ], { force: true });
 });
 
 // Combined production task
 gulp.task('production', gulp.series(
     gulp.parallel('production-css', 'production-js'),
-    'clean-non-minified'
+    'clean-production'
 ));
 
 // Watch task for development
