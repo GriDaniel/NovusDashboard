@@ -1,8 +1,7 @@
 const gulp = require('gulp');
 const concat = require('gulp-concat');
-const cssmin = require('gulp-cssmin');
-const uglify = require('gulp-uglify');
 const cleanCSS = require('gulp-clean-css');
+const terser = require('gulp-terser');
 const rename = require('gulp-rename');
 const del = require('del');
 const merge = require('merge-stream');
@@ -78,7 +77,7 @@ gulp.task('production-js', () => {
     // Minify individual files
     const minifyFiles = files.map(file => {
         return gulp.src(path.join(jsDir, file))
-            .pipe(uglify())
+            .pipe(terser())
             .pipe(rename({ suffix: '.min' }))
             .pipe(gulp.dest('wwwroot/js'));
     });
@@ -87,18 +86,23 @@ gulp.task('production-js', () => {
     const minifyFolders = folders.map(folder => {
         return gulp.src(path.join(jsDir, folder, '**/*.js'))
             .pipe(concat(`${folder}.min.js`))
-            .pipe(uglify())
+            .pipe(terser())
             .pipe(gulp.dest('wwwroot/js'));
     });
 
     return merge([...minifyFiles, ...minifyFolders]);
 });
 
-// Clean wwwroot for production (remove non-minified files and folders)
+// Clean wwwroot for production (remove non-minified files)
 gulp.task('clean-production', () => {
-    return gulp.src(['wwwroot/css/**/*', '!wwwroot/css/*.min.css'], { read: false, allowEmpty: true })
-        .pipe(clean({ force: true }));
+    return del([
+        'wwwroot/css/**/*',
+        '!wwwroot/css/*.min.css',
+        'wwwroot/js/**/*',
+        '!wwwroot/js/*.min.js'
+    ]);
 });
+
 // Combined production task
 gulp.task('production', gulp.series(
     gulp.parallel('production-css', 'production-js'),
