@@ -96,23 +96,8 @@ gulp.task('production-js', () => {
 
 // Clean wwwroot for production (remove non-minified files and folders)
 gulp.task('clean-production', () => {
-    console.log('Starting clean-production...');
-    const patterns = [
-        'wwwroot/css/**/*', '!wwwroot/css/*.min.css',
-        'wwwroot/js/**/*', '!wwwroot/js/*.min.js'
-    ];
-    console.log('Patterns to delete:', patterns);
-    return del(patterns, { force: true, dryRun: false })
-        .then(paths => {
-            console.log(`Deleted ${paths.length} files:`, paths);
-        })
-        .catch(err => {
-            console.error('Error during clean-production:', err.message);
-            return Promise.resolve(); // Prevents Gulp from hanging
-        })
-        .finally(() => {
-            console.log('Finished clean-production');
-        });
+    return gulp.src(['wwwroot/css/**/*', '!wwwroot/css/*.min.css'], { read: false, allowEmpty: true })
+        .pipe(clean({ force: true }));
 });
 // Combined production task
 gulp.task('production', gulp.series(
