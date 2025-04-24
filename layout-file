@@ -1,0 +1,82 @@
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment _environment
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - YourApp</title>
+
+    <!-- Load global CSS files from wwwroot/css, excluding Views subfolder -->
+    @{
+        var webRoot = _environment.WebRootPath;
+        var cssPath = Path.Combine(webRoot, "css");
+        var globalCssFiles = Directory.EnumerateFiles(cssPath, "*.css", SearchOption.TopDirectoryOnly).OrderBy(f => f);
+    }
+    @foreach (var file in globalCssFiles)
+    {
+        string relativePath = file.Substring(webRoot.Length).Replace("\\", "/");
+        <link href="@relativePath" rel="stylesheet" asp-append-version="true" />
+    }
+</head>
+<body>
+    @RenderBody()
+
+    <!-- Load view-specific CSS and JS within RenderBody context -->
+    @{
+        // Determine module name: prefer ViewData["ModuleName"] set by components, fallback to view path
+        string moduleName = ViewData["ModuleName"] as string;
+        if (string.IsNullOrEmpty(moduleName))
+        {
+            var razorView = ViewContext.View as Microsoft.AspNetCore.Mvc.Razor.RazorView;
+            if (razorView != null)
+            {
+                var viewPath = razorView.RazorPage.Path;
+                var parts = viewPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 2 && parts[0] == "Views")
+                {
+                    moduleName = parts[1];
+                }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(moduleName))
+        {
+            // Load view-specific CSS
+            var viewCssPath = Path.Combine(webRoot, "css", "Views", moduleName);
+            if (Directory.Exists(viewCssPath))
+            {
+                var viewCssFiles = Directory.EnumerateFiles(viewCssPath, "*.css", SearchOption.AllDirectories).OrderBy(f => f);
+                foreach (var file in viewCssFiles)
+                {
+                    string relativePath = file.Substring(webRoot.Length).Replace("\\", "/");
+                    <link href="@relativePath" rel="stylesheet" asp-append-version="true" />
+                }
+            }
+
+            // Load view-specific JS
+            var viewJsPath = Path.Combine(webRoot, "js", "Views", moduleName);
+            if (Directory.Exists(viewJsPath))
+            {
+                var viewJsFiles = Directory.EnumerateFiles(viewJsPath, "*.js", SearchOption.AllDirectories).OrderBy(f => f);
+                foreach (var file in viewJsFiles)
+                {
+                    string relativePath = file.Substring(webRoot.Length).Replace("\\", "/");
+                    <script src="@relativePath" asp-append-version="true"></script>
+                }
+            }
+        }
+    }
+
+    <!-- Load global JS files from wwwroot/js, excluding Views subfolder -->
+    @{
+        var jsPath = Path.Combine(webRoot, "js");
+        var globalJsFiles = Directory.EnumerateFiles(jsPath, "*.js", SearchOption.TopDirectoryOnly).OrderBy(f => f);
+    }
+    @foreach (var file in globalJsFiles)
+    {
+        string relativePath = file.Substring(webRoot.Length).Replace("\\", "/");
+        <script src="@relativePath" asp-append-version="true"></script>
+    }
+</body>
+</html>
