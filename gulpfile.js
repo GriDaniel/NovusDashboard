@@ -8,7 +8,6 @@ const merge = require('merge-stream');
 const fs = require('fs');
 const path = require('path');
 
-// Helper function to get folders in a directory
 function getFolders(dir) {
     try {
         return fs.readdirSync(dir)
@@ -19,7 +18,6 @@ function getFolders(dir) {
     }
 }
 
-// Helper function to get files in a directory (non-recursive)
 function getFiles(dir) {
     try {
         return fs.readdirSync(dir)
@@ -30,7 +28,6 @@ function getFiles(dir) {
     }
 }
 
-// Clean minified files for development
 gulp.task('clean-development', () => {
     console.log('Removing minified files for development...');
     return del([
@@ -39,7 +36,6 @@ gulp.task('clean-development', () => {
     ]).then(paths => console.log('Deleted minified files:\n', paths.join('\n')));
 });
 
-// Development: Mirror src to wwwroot for css and js
 gulp.task('development-css', () => {
     return gulp.src('src/css/**/*', { base: 'src/css' })
         .pipe(gulp.dest('wwwroot/css'));
@@ -55,7 +51,6 @@ gulp.task('development', gulp.series(
     gulp.parallel('development-css', 'development-js')
 ));
 
-// Production: Minify individual files and concatenate folders for css
 gulp.task('production-css', () => {
     const cssDir = 'src/css';
     const viewsDir = path.join(cssDir, 'Views');
@@ -67,32 +62,29 @@ gulp.task('production-css', () => {
     console.log('CSS root folders (excluding Views):', rootFolders);
     console.log('CSS Views subfolders:', viewsSubfolders);
 
-    // Minify individual files at root level
     const minifyFiles = files.map(file => {
         console.log(`Processing individual CSS file: ${file}`);
         return gulp.src(path.join(cssDir, file), { base: cssDir })
-            .pipe(cleanCSS())
+            .pipe(cleanCSS({ format: { breaks: { afterRule: false } } })) // Single line
             .pipe(rename({ suffix: '.min' }))
             .pipe(gulp.dest('wwwroot/css'))
             .on('end', () => console.log(`Generated: wwwroot/css/${file.replace('.css', '.min.css')}`));
     });
 
-    // Concatenate and minify root folders (excluding Views)
     const minifyRootFolders = rootFolders.map(folder => {
         console.log(`Processing CSS root folder: ${folder}`);
         return gulp.src(path.join(cssDir, folder, '**/*.css'))
             .pipe(concat(`${folder}.min.css`))
-            .pipe(cleanCSS())
+            .pipe(cleanCSS({ format: { breaks: { afterRule: false } } }))
             .pipe(gulp.dest(path.join('wwwroot/css', folder)))
             .on('end', () => console.log(`Generated: wwwroot/css/${folder}/${folder}.min.css`));
     });
 
-    // Concatenate and minify Views subfolders
     const minifyViewsSubfolders = viewsSubfolders.map(subfolder => {
         console.log(`Processing CSS Views subfolder: ${subfolder}`);
         return gulp.src(path.join(viewsDir, subfolder, '**/*.css'))
             .pipe(concat(`${subfolder}.min.css`))
-            .pipe(cleanCSS())
+            .pipe(cleanCSS({ format: { breaks: { afterRule: false } } }))
             .pipe(gulp.dest(path.join('wwwroot/css/Views', subfolder)))
             .on('end', () => console.log(`Generated: wwwroot/css/Views/${subfolder}/${subfolder}.min.css`));
     });
@@ -100,7 +92,6 @@ gulp.task('production-css', () => {
     return merge([...minifyFiles, ...minifyRootFolders, ...minifyViewsSubfolders]);
 });
 
-// Production: Minify individual files and concatenate folders for js
 gulp.task('production-js', () => {
     const jsDir = 'src/js';
     const viewsDir = path.join(jsDir, 'Views');
@@ -112,32 +103,29 @@ gulp.task('production-js', () => {
     console.log('JS root folders (excluding Views):', rootFolders);
     console.log('JS Views subfolders:', viewsSubfolders);
 
-    // Minify individual files at root level
     const minifyFiles = files.map(file => {
         console.log(`Processing individual JS file: ${file}`);
         return gulp.src(path.join(jsDir, file), { base: jsDir })
-            .pipe(terser())
+            .pipe(terser({ output: { beautify: false, comments: false } })) // Single line
             .pipe(rename({ suffix: '.min' }))
             .pipe(gulp.dest('wwwroot/js'))
             .on('end', () => console.log(`Generated: wwwroot/js/${file.replace('.js', '.min.js')}`));
     });
 
-    // Concatenate and minify root folders (excluding Views)
     const minifyRootFolders = rootFolders.map(folder => {
         console.log(`Processing JS root folder: ${folder}`);
         return gulp.src(path.join(jsDir, folder, '**/*.js'))
             .pipe(concat(`${folder}.min.js`))
-            .pipe(terser())
+            .pipe(terser({ output: { beautify: false, comments: false } }))
             .pipe(gulp.dest(path.join('wwwroot/js', folder)))
             .on('end', () => console.log(`Generated: wwwroot/js/${folder}/${folder}.min.js`));
     });
 
-    // Concatenate and minify Views subfolders
     const minifyViewsSubfolders = viewsSubfolders.map(subfolder => {
         console.log(`Processing JS Views subfolder: ${subfolder}`);
         return gulp.src(path.join(viewsDir, subfolder, '**/*.js'))
             .pipe(concat(`${subfolder}.min.js`))
-            .pipe(terser())
+            .pipe(terser({ output: { beautify: false, comments: false } }))
             .pipe(gulp.dest(path.join('wwwroot/js/Views', subfolder)))
             .on('end', () => console.log(`Generated: wwwroot/js/Views/${subfolder}/${subfolder}.min.js`));
     });
@@ -145,13 +133,11 @@ gulp.task('production-js', () => {
     return merge([...minifyFiles, ...minifyRootFolders, ...minifyViewsSubfolders]);
 });
 
-// Clean wwwroot for production (remove everything)
 gulp.task('clean-production', () => {
     console.log('Cleaning wwwroot/js and wwwroot/css...');
     return del(['wwwroot/js/**/*', 'wwwroot/css/**/*']);
 });
 
-// Combined production task
 gulp.task('production', gulp.series(
     'clean-production',
     gulp.parallel('production-css', 'production-js')
