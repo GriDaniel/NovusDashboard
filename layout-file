@@ -69,14 +69,18 @@
     }
 
     <!-- Load global JS files from wwwroot/js, excluding Views subfolder -->
-    @{
-        var jsPath = Path.Combine(webRoot, "js");
-        var globalJsFiles = Directory.EnumerateFiles(jsPath, "*.js", SearchOption.TopDirectoryOnly).OrderBy(f => f);
-    }
-    @foreach (var file in globalJsFiles)
-    {
-        string relativePath = file.Substring(webRoot.Length).Replace("\\", "/");
-        <script src="@relativePath" asp-append-version="true"></script>
-    }
+  @{
+    var jsPath = Path.Combine(webRoot, "js");
+    var isProduction = (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development") == "Production";
+    var pattern = isProduction ? "*.min.js" : "*.js";
+    var globalJsFiles = Directory.EnumerateFiles(jsPath, pattern, SearchOption.AllDirectories)
+        .Where(file => !file.Contains(Path.Combine("js", "Views") + Path.DirectorySeparatorChar))
+        .OrderBy(f => f);
+}
+@foreach (var file in globalJsFiles)
+{
+    string relativePath = file.Substring(webRoot.Length).Replace("\\", "/");
+    <script src="@relativePath" asp-append-version="true"></script>
+}
 </body>
 </html>
