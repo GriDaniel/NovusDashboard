@@ -37,3 +37,18 @@ function initializeChart() {
     console.log('Chart initialized');
     // Add chart initialization logic for #chart-placeholder
 }
+
+
+//USE SCRIPT
+
+<script>
+    $(document).ready(function() {
+        var section = window.location.hash.substring(1);
+        if (section && section !== 'Overview') {
+            loadSection(section);
+        } else {
+            window.location.hash = 'Overview';
+            initializeSection('Overview');
+        }
+    });
+</script>
